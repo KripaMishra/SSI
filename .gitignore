@@ -1,2 +1,9 @@
 .env
 opencode.json
+Data/
+omitted/
+cleaned/
+working_prompts/
+embeddings.jsonl
+__pycache__/
+*.py[cod]
