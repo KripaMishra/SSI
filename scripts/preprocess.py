@@ -41,19 +41,15 @@ def normalize_week_start(srs):
         if pd.isna(v):
             return None
         v = str(v).strip()
-        # YYYY-MM-DD -> already correct
         if re.match(r"^\d{4}-\d{2}-\d{2}$", v):
             return v
-        # DD-MM-YYYY
         m = re.match(r"^(\d{2})-(\d{2})-(\d{4})$", v)
         if m:
             return f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
-        # MM/DD/YY
         m = re.match(r"^(\d{2})/(\d{2})/(\d{2})$", v)
         if m:
             yy = "20" + m.group(3)
             return f"{yy}-{m.group(1)}-{m.group(2)}"
-        # DD Mon YYYY e.g. "01 Jul 2025"
         month_map = {
             "jan": "01", "feb": "02", "mar": "03", "apr": "04",
             "may": "05", "jun": "06", "jul": "07", "aug": "08",
@@ -65,7 +61,7 @@ def normalize_week_start(srs):
             mon = month_map.get(m.group(2).lower())
             if mon:
                 return f"{m.group(3)}-{mon}-{day}"
-        return v  # fallback: leave as-is
+        return v
     return srs.apply(_norm)
 
 # ══════════════════════════════════════════════════════════════════════
@@ -98,23 +94,19 @@ logger.info("loaded raw tables", extra={k: len(v) for k, v in tables.items()})
 # ══════════════════════════════════════════════════════════════════════
 
 # ── 2a. dim_geo ──────────────────────────────────────────────────────
-# Fix: Bombay -> Mumbai, S -> South, E -> East
 dim_geo["territory"] = dim_geo["territory"].str.replace("Bombay", "Mumbai", regex=False)
 region_map = {"S": "South", "E": "East"}
 dim_geo["region"] = dim_geo["region"].replace(region_map)
 logger.info("dim_geo: transformed", extra={"territories": dim_geo["territory"].nunique(), "regions": dim_geo["region"].unique().tolist()})
 
 # ── 2b. dim_sku ──────────────────────────────────────────────────────
-# Fix: whitespace on sku_code
 dim_sku["sku_code"] = dim_sku["sku_code"].str.strip()
-# Fix: tier -> lowercase, VAL->value, PREM->premium
 dim_sku["tier"] = dim_sku["tier"].str.lower()
 tier_map = {"val": "value", "prem": "premium"}
 dim_sku["tier"] = dim_sku["tier"].replace(tier_map)
 logger.info("dim_sku: transformed", extra={"skus": len(dim_sku), "tiers": dim_sku["tier"].unique().tolist()})
 
 # ── 2c. dim_rep ──────────────────────────────────────────────────────
-# Fix: missing rep_name for SO-04 -> "Officer 4"
 dim_rep["rep_name"] = dim_rep.apply(
     lambda r: f"Officer {int(r['rep_id'].split('-')[1])}" if pd.isna(r["rep_name"]) else r["rep_name"],
     axis=1,
@@ -122,7 +114,7 @@ dim_rep["rep_name"] = dim_rep.apply(
 logger.info("dim_rep: filled missing names", extra={"reps": len(dim_rep)})
 
 # ── 2d. dim_distributor ──────────────────────────────────────────────
-# No structural transformations needed (territory mapping happens at join time)
+# No structural transformations needed
 
 # ── 2e. fact_primary_sales ───────────────────────────────────────────
 # Fix 1: week_start normalize to YYYY-MM-DD
@@ -137,25 +129,52 @@ fact_sales["territory"] = fact_sales["territory"].replace({"BLR": "Bengaluru", "
 # Fix 4: primary_sales_value - extract numeric from string patterns
 fact_sales["primary_sales_value"] = extract_numeric_sales_value(fact_sales["primary_sales_value"])
 
-# Fix 5: primary_sales_units - add negative flag
+# Fix 5: primary_sales_units - handle sentinel values and negatives
 fact_sales["primary_sales_units"] = pd.to_numeric(fact_sales["primary_sales_units"], errors="coerce")
+
+# Default flag
 fact_sales["sales_units_flag"] = "ok"
-fact_sales.loc[fact_sales["primary_sales_units"] < 0, "sales_units_flag"] = "negative"
-neg_count = (fact_sales["sales_units_flag"] == "negative").sum()
-logger.info("fact_primary_sales: transformed", extra={"rows": len(fact_sales), "negative_units": int(neg_count)})
+
+# Sentinel 9999 → NULL, flag = "sentinel_9999"
+sentinel_9999_mask = fact_sales["primary_sales_units"] == 9999
+sentinel_9999_count = sentinel_9999_mask.sum()
+fact_sales.loc[sentinel_9999_mask, "primary_sales_units"] = None
+fact_sales.loc[sentinel_9999_mask, "sales_units_flag"] = "sentinel_9999"
+logger.info("fact_primary_sales: sentinel 9999 → NULL", extra={"rows_affected": int(sentinel_9999_count)})
+
+# Sentinel -9999 → NULL, flag = "sentinel_-9999"
+sentinel_neg_9999_mask = fact_sales["primary_sales_units"] == -9999
+sentinel_neg_9999_count = sentinel_neg_9999_mask.sum()
+fact_sales.loc[sentinel_neg_9999_mask, "primary_sales_units"] = None
+fact_sales.loc[sentinel_neg_9999_mask, "sales_units_flag"] = "sentinel_-9999"
+logger.info("fact_primary_sales: sentinel -9999 → NULL", extra={"rows_affected": int(sentinel_neg_9999_count)})
+
+# Other negative values → NULL, flag = "negative"
+# Recompute mask excluding already-null (sentinel -9999 already nulled)
+other_neg_mask = (fact_sales["primary_sales_units"] < 0) & (fact_sales["sales_units_flag"] == "ok")
+other_neg_count = other_neg_mask.sum()
+fact_sales.loc[other_neg_mask, "primary_sales_units"] = None
+fact_sales.loc[other_neg_mask, "sales_units_flag"] = "negative"
+logger.info("fact_primary_sales: negative values → NULL", extra={"rows_affected": int(other_neg_count)})
+
+ok_count = (fact_sales["sales_units_flag"] == "ok").sum()
+null_count = fact_sales["primary_sales_units"].isna().sum()
+logger.info("fact_primary_sales: transformed", extra={
+    "rows": len(fact_sales),
+    "ok": int(ok_count),
+    "nulled_total": int(null_count),
+    "sentinel_9999": int(sentinel_9999_count),
+    "sentinel_-9999": int(sentinel_neg_9999_count),
+    "negative": int(other_neg_count),
+})
 
 # ── 2f. fact_targets ─────────────────────────────────────────────────
-# Fix: area -> territory mapping (Mumbai handled via dim_geo)
-fact_targs["area"] = fact_targs["area"].replace({"Mumbai": "Mumbai"})  # already consistent, no-op
-# Territory mapping for area column
 fact_targs["area"] = fact_targs["area"].replace({"BLR": "Bengaluru", "BGL": "Bengaluru"})
 
 # ── 2g. promotions ───────────────────────────────────────────────────
-# Fix: territory mapping
 promos["territory"] = promos["territory"].replace({"BLR": "Bengaluru", "BGL": "Bengaluru"})
 
 # ── 2h. stockouts ────────────────────────────────────────────────────
-# Fix: territory mapping
 stocks["territory"] = stocks["territory"].replace({"BLR": "Bengaluru", "BGL": "Bengaluru"})
 
 # ══════════════════════════════════════════════════════════════════════
@@ -163,8 +182,9 @@ stocks["territory"] = stocks["territory"].replace({"BLR": "Bengaluru", "BGL": "B
 # ══════════════════════════════════════════════════════════════════════
 
 # ── 3a. fact_primary_sales: duplicate rows on logical key ────────────
+# keep='first' keeps one row per duplicate pair, drops the other 23
 key_cols = ["week_start", "sku_code", "territory", "distributor_id"]
-dup_mask = fact_sales.duplicated(subset=key_cols, keep=False)
+dup_mask = fact_sales.duplicated(subset=key_cols, keep="first")
 dups = fact_sales[dup_mask].copy()
 dups["omitted_reason"] = f"duplicate on composite key {key_cols}"
 fact_sales = fact_sales[~dup_mask].copy()
@@ -175,7 +195,7 @@ promo_omit["omitted_reason"] = "territory='North' is a region code, not a valid 
 promos = promos[promos["territory"] != "North"].copy()
 
 # ══════════════════════════════════════════════════════════════════════
-# 4. SAVE CLEANED (CSV only — parquet engine not available)
+# 4. SAVE CLEANED
 # ══════════════════════════════════════════════════════════════════════
 fact_sales.to_csv(CLEAN / "fact_primary_sales.csv", index=False)
 fact_targs.to_csv(CLEAN / "fact_targets.csv", index=False)
