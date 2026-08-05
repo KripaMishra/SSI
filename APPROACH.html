@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SSI — Sales Intelligence Assistant | Approach</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #0f172a; --surface: #1e293b; --border: #334155;
+    --text: #e2e8f0; --muted: #94a3b8; --accent: #38bdf8;
+    --green: #4ade80; --amber: #fbbf24; --red: #f87171;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; padding: 2rem; }
+  .container { max-width: 1000px; margin: 0 auto; }
+  h1 { font-size: 2rem; font-weight: 700; margin-bottom: 0.25rem; }
+  h1 span { color: var(--accent); }
+  .subtitle { color: var(--muted); margin-bottom: 2rem; font-size: 0.95rem; }
+  h2 { font-size: 1.35rem; font-weight: 600; margin: 2.5rem 0 1rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--border); color: var(--accent); }
+  h3 { font-size: 1.1rem; font-weight: 600; margin: 1.5rem 0 0.5rem; }
+  p, li { color: var(--text); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.25rem; margin: 1rem 0; }
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+  .stat { text-align: center; padding: 1rem; }
+  .stat .num { font-size: 1.8rem; font-weight: 700; color: var(--accent); display: block; }
+  .stat .label { font-size: 0.85rem; color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); }
+  th { color: var(--accent); font-weight: 600; }
+  .tag { display: inline-block; background: #1e3a5f; color: var(--accent); font-size: 0.75rem; padding: 0.15rem 0.5rem; border-radius: 4px; margin: 0.1rem; }
+  .tag.green { background: #14532d; color: var(--green); }
+  .tag.amber { background: #451a03; color: var(--amber); }
+  .tag.red { background: #450a0a; color: var(--red); }
+  pre { background: #0f172a; border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem 1rem; overflow-x: auto; font-size: 0.8rem; color: #e2e8f0; margin: 0.5rem 0; }
+  code { font-family: 'JetBrains Mono', 'Fira Code', monospace; }
+  .mermaid { background: var(--surface); border-radius: 10px; padding: 1rem; margin: 1rem 0; overflow-x: auto; }
+  .badge { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.7rem; font-weight: 600; }
+  .badge.infra { background: #1e3a5f; color: var(--accent); }
+  .badge.data { background: #14532d; color: var(--green); }
+  .badge.agent { background: #451a03; color: var(--amber); }
+  .badge.queue { background: #3b0764; color: #d8b4fe; }
+  ul, ol { padding-left: 1.5rem; margin: 0.5rem 0; }
+  li { margin: 0.25rem 0; }
+  .risk { border-left: 3px solid var(--red); padding-left: 0.75rem; margin: 0.5rem 0; }
+  .mitigation { border-left: 3px solid var(--green); padding-left: 0.75rem; margin: 0.5rem 0; }
+  .tradeoff { border-left: 3px solid var(--amber); padding-left: 0.75rem; margin: 0.5rem 0; }
+  .flow-arrow { color: var(--muted); margin: 0 0.3rem; }
+  .footnote { color: var(--muted); font-size: 0.85rem; margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>SSI — <span>Sales Intelligence Assistant</span></h1>
+<p class="subtitle">Approach Document · System Architecture · Data Pipeline · Agent Runtime</p>
+
+<div class="card-grid">
+  <div class="card stat"><span class="num">61,932</span><span class="label">Primary Sales Rows</span></div>
+  <div class="card stat"><span class="num">38.6M</span><span class="label">National Units (52 wk)</span></div>
+  <div class="card stat"><span class="num">30</span><span class="label">Unstructured Docs</span></div>
+  <div class="card stat"><span class="num">3</span><span class="label">Agent Tools</span></div>
+  <div class="card stat"><span class="num">12</span><span class="label">Territories</span></div>
+  <div class="card stat"><span class="num">5</span><span class="label">Product Categories</span></div>
+</div>
+
+<!-- ============================================================ -->
+<h2>1. Problem Summary</h2>
+
+<p>Build an AI assistant that answers three question types over structured sales data and unstructured text documents:</p>
+
+<table>
+  <tr><th>Type</th><th>Example</th><th>Output Contract</th></tr>
+  <tr><td><span class="tag">WHAT</span></td><td><em>"What were GlucoJoy's monthly primary sales vs target in North region in November 2025?"</em></td><td>Factual response with data + citations</td></tr>
+  <tr><td><span class="tag">WHY</span></td><td><em>"Why did SparkClean 1kg primary sales spike in Mumbai in the week of 16 Sep 2025?"</em></td><td>Causal analysis; <strong>citations mandatory</strong></td></tr>
+  <tr><td><span class="tag amber">WHAT_TO_DO</span></td><td><em>"What should we do about declining sales in Delhi?"</em></td><td>Recommendation; <strong>status = PENDING_APPROVAL</strong></td></tr>
+</table>
+
+<p><strong>Key constraints:</strong> Stateless agent (no conversation memory), raw data has quality issues (sentinels, negatives, mixed formats, PII), must handle high traffic via async queue, responses must cite sources.</p>
+
+<!-- ============================================================ -->
+<h2>2. System Architecture</h2>
+
+<div class="mermaid">
+flowchart TB
+    subgraph infra["<b>📡 Infrastructure</b>"]
+        direction LR
+        FastAPI["FastAPI<br/>(/ask, /ask-direct, /webhook/process)"]
+        Redis["Redis<br/>(Semantic Cache +<br/>QStash Results)"]
+        QStash["QStash<br/>(Message Queue)"]
+    end
+
+    subgraph data["<b>🗄️ Data Layer</b>"]
+        direction LR
+        PG[("PostgreSQL / SQLite<br/>8 tables<br/>Star Schema")]
+        CHROMA[("ChromaDB<br/>ssi_docs collection<br/>30 documents")]
+    end
+
+    subgraph agent["<b>🤖 Agent Runtime</b>"]
+        direction LR
+        LLM["LLM<br/>(deepseek-v4-flash)"]
+        Tools["Tool Node<br/>(3 tools)"]
+        Finalize["Finalize<br/>(structured output)"]
+    end
+
+    subgraph tracing["<b>📊 Observability</b>"]
+        Langfuse["Langfuse"]
+    end
+
+    FastAPI --> QStash
+    FastAPI --> Redis
+    QStash --> FastAPI
+    FastAPI --> agent
+    agent --> data
+    agent --> tracing
+</div>
+
+<h3>Component Breakdown</h3>
+
+<table>
+  <tr><th>Component</th><th>Technology</th><th>Role</th></tr>
+  <tr><td>API Gateway</td><td>FastAPI (Python 3.12)</td><td>3 endpoints: synchronous (<code>/ask-direct</code>), queued (<code>/ask</code>), webhook (<code>/webhook/process</code>)</td></tr>
+  <tr><td>Agent Runtime</td><td>LangGraph StateGraph</td><td>Cyclic 3-node graph: LLM call → tool execution → finalize</td></tr>
+  <tr><td>LLM</td><td>deepseek-v4-flash</td><td>OpenAI-compatible backend, temp=0, reasoning_effort=low</td></tr>
+  <tr><td>Message Queue</td><td>QStash (Upstash)</td><td>Decouples HTTP request from agent execution; retries=1, timeout=180s</td></tr>
+  <tr><td>Cache</td><td>Redis (Upstash)</td><td>Semantic cache (cosine sim ≥ 0.97) + QStash result store</td></tr>
+  <tr><td>Vector Store</td><td>ChromaDB</td><td>30 documents, Gemini embeddings (1536d)</td></tr>
+  <tr><td>Relational DB</td><td>SQLite / PostgreSQL</td><td>8 tables, star schema, cleaned data</td></tr>
+  <tr><td>Embeddings</td><td>gemini-embedding-2</td><td>1536 dimensions, used by both cache and vector search</td></tr>
+  <tr><td>Tracing</td><td>Langfuse</td><td>LLM calls, chain steps, tool invocations</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2>3. Request Lifecycle (QStash + Redis)</h2>
+
+<div class="mermaid">
+sequenceDiagram
+    participant C as Client
+    participant API as FastAPI /ask
+    participant RC as Redis Cache
+    participant QS as QStash
+    participant WH as Webhook /webhook/process
+    participant AG as Agent Runtime
+    participant RR as Redis Results
+
+    C->>API: POST /ask {question}
+    API->>RC: SemanticCache.get(question)
+    alt Cache HIT
+        RC-->>API: cached AgentResponse
+        API-->>C: 200 OK (cached)
+    else Cache MISS
+        API->>QS: enqueue(queue, url, body, retries=1, timeout=180s)
+        QS-->>API: message_id
+        API-->>C: 202 Accepted
+        loop Poll every 0.5s
+            API->>RR: GET qstash_result:{message_id}
+        end
+        QS->>WH: POST /webhook/process {question}
+        WH->>WH: verify Upstash-Signature
+        WH->>AG: run_agent(question)
+        AG->>AG: LangGraph loop (tool calls → finalize)
+        AG-->>WH: AgentResponse
+        WH->>RR: SET qstash_result:{message_id} + TTL
+        RR-->>API: result available
+        API->>RC: SemanticCache.set(response)
+        API-->>C: 200 OK {response}
+    end
+    alt Poll Timeout (180s)
+        API-->>C: 408 Request Timeout
+    end
+    alt Webhook Error
+        WH->>RR: SET error + TTL
+        RR-->>API: error
+        API-->>C: 500 Internal Error
+    end
+</div>
+
+<h3>Fallback Path: <code>/ask-direct</code></h3>
+<p>Bypasses cache and queue entirely. Calls <code>run_agent()</code> synchronously. Used for testing, debugging, or when latency is preferred over reliability.</p>
+
+<!-- ============================================================ -->
+<h2>4. Data Pipeline</h2>
+
+<h3>4.1 Structured Data (CSV → SQLite)</h3>
+
+<div class="mermaid">
+flowchart LR
+    RAW[("Data/*.csv<br/>8 files")] --> EDA[("EDA Scripts<br/>scripts/eda_script.py<br/>scripts/analyze_sales_value_patterns.py")]
+    EDA --> PREPROCESS["preprocess.py<br/>• Normalize dates (4 formats → YYYY-MM-DD)<br/>• Extract numeric from 'Rs 1,234'<br/>• Null sentinels 9999/-9999/negatives<br/>• Map territory names (BLR→Bengaluru)<br/>• Strip leading zeros on IDs<br/>• Standardize tiers/regions<br/>• Drop duplicates (23 rows → omitted/)<br/>• Add sales_units_flag"]
+    PREPROCESS --> CLEANED[("cleaned/*.csv<br/>8 files")]
+    PREPROCESS --> OMITTED[("omitted/*.csv<br/>2 files")]
+    CLEANED --> INGEST["structured_ingest.py<br/>• CREATE TABLEs<br/>• INSERT row-by-row<br/>• Chunked: 5000 rows/batch"]
+    INGEST --> DB[("src/internal/db/ssi.db<br/>8 tables, FK constraints")]
+    DB --> DUMP["db.sql<br/>Full DDL + INSERT dump"]
+</div>
+
+<h3>4.2 Unstructured Data (TXT → ChromaDB)</h3>
+
+<div class="mermaid">
+flowchart LR
+    TXT[("Data/docs/*.txt<br/>30 files")] --> CLEAN["clean_docs.py<br/>• PII redaction (names/emails/phones)<br/>• Metadata extraction<br/>• 1 chunk per document"]
+    CLEAN --> JSONL[("cleaned/cleaned_docs.jsonl")]
+    JSONL --> EMBED["generate_embeddings.py<br/>• gemini-embedding-2<br/>• 1536 dimensions"]
+    EMBED --> EMBEDDINGS[("embeddings.jsonl")]
+    EMBEDDINGS --> VECTOR["vector_ingest.py<br/>• ChromaDB collection: ssi_docs"]
+    VECTOR --> CHROMA[("ChromaDB<br/>ssi_docs")]
+</div>
+
+<h3>4.3 Data Quality Report</h3>
+
+<table>
+  <tr><th>Issue</th><th>Table</th><th>Rows</th><th>Fix</th><th>Severity</th></tr>
+  <tr><td>Multiple date formats</td><td>fact_primary_sales</td><td>10,972</td><td>Normalized 4 formats → YYYY-MM-DD</td><td><span class="tag amber">high</span></td></tr>
+  <tr><td>Non-numeric sales value</td><td>fact_primary_sales</td><td>9,416</td><td>Extracted "Rs 1,234" → numeric</td><td><span class="tag amber">high</span></td></tr>
+  <tr><td>Sentinel 9999</td><td>fact_primary_sales</td><td>771</td><td>→ NULL, flag = sentinel_9999</td><td><span class="tag red">critical</span></td></tr>
+  <tr><td>Negative values</td><td>fact_primary_sales</td><td>734</td><td>→ NULL, flag = negative</td><td><span class="tag red">critical</span></td></tr>
+  <tr><td>Sentinel -9999</td><td>fact_primary_sales</td><td>1</td><td>→ NULL, flag = sentinel_-9999</td><td><span class="tag red">critical</span></td></tr>
+  <tr><td>Duplicate rows</td><td>fact_primary_sales</td><td>23 (46 total)</td><td>Keep first, rest→omitted/</td><td><span class="tag amber">high</span></td></tr>
+  <tr><td>Territory FK violations</td><td>4 tables</td><td>~190</td><td>BLR/BGL→Bengaluru, Bombay→Mumbai</td><td><span class="tag amber">high</span></td></tr>
+  <tr><td>Distributor leading zero</td><td>fact_primary_sales</td><td>24 IDs</td><td>lstrip("0")</td><td><span class="tag">medium</span></td></tr>
+  <tr><td>SKU tier abbreviations</td><td>dim_sku</td><td>8→3 values</td><td>Lowercased, val→value, prem→premium</td><td><span class="tag">medium</span></td></tr>
+  <tr><td>Region abbreviations</td><td>dim_geo</td><td>2 values</td><td>S→South, E→East</td><td><span class="tag">medium</span></td></tr>
+  <tr><td>Wrong territory (region)</td><td>promotions</td><td>1</td><td>Omitted to omitted/</td><td><span class="tag">low</span></td></tr>
+  <tr><td>Missing rep_name</td><td>dim_rep</td><td>1</td><td>Filled from rep_id</td><td><span class="tag">low</span></td></tr>
+  <tr><td>PII in text docs</td><td>Data/docs</td><td>12 redactions</td><td>REDACTED in 30 docs</td><td><span class="tag red">critical</span></td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2>5. Data Model (ERD)</h2>
+<div class="mermaid">
+erDiagram
+    dim_geo ||--o{ dim_rep : "territory"
+    dim_geo ||--o{ dim_distributor : "territory"
+    dim_geo ||--o{ fact_primary_sales : "territory"
+    dim_geo ||--o{ fact_targets : "area"
+    dim_geo ||--o{ promotions : "territory"
+    dim_geo ||--o{ stockouts : "territory"
+    dim_sku ||--o{ fact_primary_sales : "sku_code"
+    dim_sku ||--o{ fact_targets : "material_no"
+    dim_sku ||--o{ promotions : "sku"
+    dim_sku ||--o{ stockouts : "item_code"
+    dim_distributor ||--o{ fact_primary_sales : "distributor_id"
+
+    dim_geo {
+        string territory PK "12 territories"
+        string region "North, South, East, West"
+    }
+
+    dim_sku {
+        string sku_code PK "136 SKUs"
+        string category "Biscuits, Detergent, Shampoo, Snacks, Tea"
+        string brand
+        string sku_name
+        string pack_size
+        string flavour
+        string tier "mainstream, premium, value"
+        string base_mrp "VARCHAR (non-numeric values)"
+    }
+
+    dim_rep {
+        string rep_id PK "12 reps"
+        string rep_name
+        string territory FK
+    }
+
+    dim_distributor {
+        string distributor_id PK "24 distributors"
+        string distributor_name
+        string territory FK
+    }
+
+    fact_primary_sales {
+        date week_start PK "52 weeks: 2025-07-01 to 2026-06-23"
+        string sku_code PK FK
+        string territory PK FK
+        string distributor_id PK FK
+        int primary_sales_units "nullable"
+        float primary_sales_value
+        string sales_units_flag "ok, sentinel_9999, sentinel_-9999, negative"
+    }
+
+    fact_targets {
+        date month PK
+        string material_no PK FK
+        string area PK FK
+        float target_value
+    }
+
+    promotions {
+        date week_start PK
+        string sku PK FK
+        string territory PK FK
+        string promo_type
+        float promo_discount_pct
+    }
+
+    stockouts {
+        date week_start PK
+        string item_code PK FK
+        string territory PK FK
+        string stockout_flag
+        int stockout_days
+    }
+</div>
+
+<h3>Key Modelling Decisions</h3>
+<ul>
+  <li><strong>Star schema</strong> — 4 dimensions, 2 facts, 2 supporting tables. All fact tables reference dimensions via FKs.</li>
+  <li><strong>sales_units_flag</strong> — Tracks data quality provenance on each row so the agent can adjust confidence. Not a standard data warehouse column, but essential for this use case where 2.4% of rows have unreliable values.</li>
+  <li><strong>base_mrp as VARCHAR</strong> — Preserved from CSV dtype to avoid coercion errors. The ORM maps it as String.</li>
+  <li><strong>FK naming inconsistencies</strong> — <code>fact_targets.material_no</code> (should be <code>sku_code</code>), <code>fact_targets.area</code> (should be <code>territory</code>), <code>stockouts.item_code</code>, <code>promotions.sku</code> — all documented in the data dictionary.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2>6. Agent Runtime</h2>
+
+<h3>6.1 Graph Structure</h3>
+
+<div class="mermaid">
+flowchart TD
+    START --> LLM["LLM Call<br/>deepseek-v4-flash<br/>temp=0, reasoning_effort=low<br/>3 tools bound"]
+    LLM --> CHECK{"has tool_calls?"}
+    CHECK -->|"Yes"| TOOL["Tool Node<br/>• search_docs(query, top_k=5)<br/>• describe_database()<br/>• query_database(table, filters, joins, agg, ...)"]
+    TOOL --> LLM
+    CHECK -->|"No"| FINAL["Finalize<br/>with_structured_output(AgentResponse)<br/>json_mode"]
+    FINAL --> VALIDATE["_validate_response()<br/>• WHY → citations must be non-empty<br/>• WHAT_TO_DO → status = PENDING_APPROVAL<br/>• Tool errors → status = ERROR<br/>• Fallback → ResponseValidationError"]
+    VALIDATE --> END
+</div>
+
+<h3>6.2 Tools</h3>
+
+<table>
+  <tr><th>Tool</th><th>Inputs</th><th>Source</th><th>Citation Format</th></tr>
+  <tr>
+    <td><code>search_docs</code></td>
+    <td><code>query: str</code>, <code>top_k: int (default 5)</code></td>
+    <td>ChromaDB (Gemini embeddings)</td>
+    <td><code>vector_db:SSI:{doc_id}</code></td>
+  </tr>
+  <tr>
+    <td><code>describe_database</code></td>
+    <td><em>none</em></td>
+    <td>SQLAlchemy ORM introspection</td>
+    <td><em>no citation (schema metadata)</em></td>
+  </tr>
+  <tr>
+    <td><code>query_database</code></td>
+    <td><code>table</code>, <code>columns</code>, <code>filters</code> (with ops: <code>__gt/gte/lt/lte/ne/in/like</code>), <code>joins</code>, <code>order_by</code>, <code>group_by</code>, <code>agg_functions</code> (SUM/AVG/COUNT/MIN/MAX), <code>limit</code> (max 1000), <code>offset</code></td>
+    <td>SQLite / PostgreSQL via ORM</td>
+    <td><code>relational_db:{table}?{params}</code></td>
+  </tr>
+</table>
+
+<h3>6.3 Response Model</h3>
+
+<pre>
+AgentResponse {
+  intent: "WHAT" | "WHY" | "WHAT_TO_DO" | "OUT_OF_DOMAIN" | "ERROR"
+  status: "OK" | "PENDING_APPROVAL" | "ABSTAINED" | "ERROR"
+  answer: str          // Markdown response
+  citations: string[]  // Source references
+  status_message?: str // Human-readable status explanation
+  chart_data?: {       // Optional chart for visualization
+    chart_type: "bar" | "line" | "pie"
+    title: str
+    labels: string[]
+    datasets: [{ label: str, values: float[] }]
+  }
+}
+</pre>
+
+<h3>6.4 Validation Rules</h3>
+
+<table>
+  <tr><th>Intent</th><th>Rule</th><th>Why</th></tr>
+  <tr><td>WHY</td><td><code>citations.length > 0</code></td><td>Causal claims must be traceable to source data</td></tr>
+  <tr><td>WHAT_TO_DO</td><td><code>status == "PENDING_APPROVAL"</code></td><td>Recommendations require human sign-off before action</td></tr>
+  <tr><td>Tool error</td><td><code>status == "ERROR"</code></td><td>Don't return misleading OK responses when tools fail</td></tr>
+  <tr><td>Fallback</td><td>Raise <code>ResponseValidationError</code></td><td>Fail closed rather than returning invalid data</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2>7. Caching Strategy</h2>
+
+<div class="card-grid">
+  <div class="card stat"><span class="num">0.97</span><span class="label">Cosine Similarity Threshold</span></div>
+  <div class="card stat"><span class="num">600s</span><span class="label">Default TTL</span></div>
+  <div class="card stat"><span class="num">1536</span><span class="label">Embedding Dimensions</span></div>
+  <div class="card stat"><span class="num">gemini-embedding-2</span><span class="label">Embedding Model</span></div>
+</div>
+
+<h3>SemanticCache Flow</h3>
+
+<div class="mermaid">
+flowchart TD
+    Q["Incoming Question"] --> EMBED["Generate Embedding<br/>gemini-embedding-2"]
+    EMBED --> SCAN["Scan all semcache:* keys<br/>via SMEMBERS semcache:index"]
+    SCAN --> COSINE["Compute cosine similarity<br/>query_emb · cached_emb"]
+    COSINE --> THRESHOLD{"≥ 0.97?"}
+    THRESHOLD -->|"Yes"| HIT["Cache HIT<br/>• Return cached AgentResponse<br/>• Refresh TTL (hot promotion)"]
+    THRESHOLD -->|"No"| MISS["Cache MISS<br/>• Proceed to QStash enqueue<br/>• On success: SemanticCache.set(response)"]
+    HIT --> RESPOND["Respond 200 OK"]
+    MISS --> ENQUEUE["Enqueue to QStash"]
+</div>
+
+<h3>Limitations & Future Work</h3>
+<ul>
+  <li><strong>Current:</strong> TTL-based invalidation — naive, no awareness of data updates.</li>
+  <li><strong>Better:</strong> Invalidate on data update events (e.g., after new CSV ingestion) + pre-synthesize cache entries for frequently queried topics.</li>
+  <li><strong>Better:</strong> Use Redis vector search (RediSearch) instead of scanning all keys and computing cosine similarity in Python — O(n) scan vs O(log n) HNSW index.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2>8. Risk Awareness & Trade-off Reasoning</h2>
+
+<h3>8.1 Risks</h3>
+
+<div class="risk"><strong>Risk: Incorrect query generation</strong> — The LLM may generate wrong SQL-equivalent filters (e.g., joining on wrong columns, applying incorrect date ranges).</div>
+<div class="mitigation"><strong>Mitigation:</strong> <code>describe_database()</code> provides schema context on every invocation. The <code>query_database</code> tool is an ORM wrapper with typed parameters, not raw SQL — this limits the blast radius. The agent iterates via tool loop: if a query returns unexpected results, it can self-correct in the next cycle (timeout-permitting).</div>
+
+<div class="risk"><strong>Risk: Hallucinated responses</strong> — The LLM may invent numbers or cite non-existent sources, especially for WHY questions that require causal reasoning.</div>
+<div class="mitigation"><strong>Mitigation:</strong> WHY intent enforces <code>citations.length > 0</code> at the validation layer. Citations come from tool outputs (ChromaDB doc IDs, relational DB query params), not from the LLM's internal knowledge. The <code>finalize</code> node uses structured output (<code>with_structured_output</code> + <code>json_mode</code>), reducing free-form hallucination surface.</div>
+
+<div class="risk"><strong>Risk: Data misinterpretation</strong> — The LLM may treat nulled sentinel values as meaningful, or confuse <code>fact_targets.area</code> with <code>fact_primary_sales.territory</code>.</div>
+<div class="mitigation"><strong>Mitigation:</strong> <code>sales_units_flag</code> column with explicit semantics in the system prompt instructs the agent to treat non-<code>ok</code> rows as unreliable. The system prompt documents the FK naming inconsistencies (<code>material_no</code> = <code>sku_code</code>, <code>area</code> = <code>territory</code>) so the agent maps correctly.</div>
+
+<h3>8.2 Trade-offs</h3>
+
+<div class="tradeoff"><strong>Single agent vs. multi-agent system.</strong> The PRD requested a multi-agent system. A single agent with a tool loop was chosen because: (1) the scope is narrow (3 question types, 3 tools) — multi-agent supervision would add latency, token waste, and state management complexity without proportional benefit; (2) the agent is stateless per request — no conversation memory to distribute across agents; (3) the tool loop already provides the core multi-agent benefit (decomposition + delegation) within a single LLM context window.</div>
+
+<div class="tradeoff"><strong>ORM wrapper vs. raw SQL.</strong> The <code>query_database</code> tool wraps SQLAlchemy ORM instead of running raw SQL. This limits query complexity (no subqueries, CTEs, window functions) but prevents SQL injection and keeps the agent from generating malformed queries. A read replica with raw SQL execution would be more powerful but requires stricter access control and query validation.</div>
+
+<div class="tradeoff"><strong>deepseek-v4-flash vs. lighter model.</strong> The chosen model is overkill for this task and slower than alternatives. Used due to resource constraints on <code>gemini-flash-lite</code>. A production deployment should use a faster, cheaper model like <code>gpt-4o-mini</code> or <code>gemini-2.0-flash-lite</code>.</div>
+
+<!-- ============================================================ -->
+<h2>9. Agentic Construct</h2>
+
+<table>
+  <tr><th>Step</th><th>Name</th><th>Input</th><th>Output</th><th>Handoff</th><th>Failure Path</th></tr>
+  <tr>
+    <td>1</td><td><strong>Classify Intent</strong></td>
+    <td>User question</td>
+    <td>Intent (WHAT/WHY/WHAT_TO_DO/OUT_OF_DOMAIN)</td>
+    <td>→ Step 2 (if in-domain)</td>
+    <td>OUT_OF_DOMAIN → ABSTAINED → respond</td>
+  </tr>
+  <tr>
+    <td>2</td><td><strong>Gather Schema</strong></td>
+    <td>Intent</td>
+    <td>Database schema description</td>
+    <td>→ Step 3</td>
+    <td>Tool error → ERROR → respond</td>
+  </tr>
+  <tr>
+    <td>3</td><td><strong>Query & Retrieve</strong></td>
+    <td>Schema + question</td>
+    <td>Query results + doc results</td>
+    <td>→ Loop to Step 3 (if more queries needed) or → Step 4</td>
+    <td>Tool error → ERROR → respond</td>
+  </tr>
+  <tr>
+    <td>4</td><td><strong>Synthesize & Validate</strong></td>
+    <td>All tool results</td>
+    <td>AgentResponse with citations</td>
+    <td>→ Respond</td>
+    <td>Validation failure → ResponseValidationError → 500</td>
+  </tr>
+</table>
+
+<p>The agent iterates between Steps 2 and 3 (the tool loop) until the LLM decides it has enough data. The loop is bounded by a 180-second timeout.</p>
+
+<!-- ============================================================ -->
+<h2>10. Key Metrics</h2>
+
+<table>
+  <tr><th>Metric</th><th>Value</th></tr>
+  <tr><td>Fact table rows</td><td>61,932 (primary sales) + 14,292 (targets) + 2 (promotions) + 2 (stockouts)</td></tr>
+  <tr><td>Dimension rows</td><td>12 (geo) + 136 (SKU) + 12 (reps) + 24 (distributors)</td></tr>
+  <tr><td>Total cleaned rows (ok flag)</td><td>60,426 (97.6%)</td></tr>
+  <tr><td>Unreliable rows (flagged)</td><td>1,506 (2.4%)</td></tr>
+  <tr><td>Unstructured docs</td><td>30 (after 1 chunk per doc)</td></tr>
+  <tr><td>Data quality fixes applied</td><td>13 distinct fixes across 8 tables</td></tr>
+  <tr><td>PII redactions</td><td>12 (4 names, 4 emails, 4 phones)</td></tr>
+  <tr><td>Rows omitted</td><td>24 (23 duplicates + 1 wrong territory)</td></tr>
+  <tr><td>Agent timeout</td><td>180 seconds</td></tr>
+  <tr><td>Cache TTL</td><td>600 seconds (10 minutes)</td></tr>
+  <tr><td>Cache similarity threshold</td><td>0.97 cosine</td></tr>
+  <tr><td>QStash poll interval</td><td>0.5 seconds</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2>11. AI Tool Usage Reflection</h2>
+
+<ul>
+  <li><strong>Primary tool:</strong> OpenCode (Cadra) — used as the sole coding agent throughout development.</li>
+  <li><strong>Effective:</strong> Long-running multi-step tasks with explicit step-by-step breakdowns. Documentation lookup when source is explicitly named.</li>
+  <li><strong>Ineffective:</strong> Doesn't auto-detect <code>ctxMode</code> (had to prompt explicitly). Misses LSP warnings unless flagged. Used deprecated LangGraph APIs (manual JSON parsing instead of <code>with_structured_output</code>). Returned HTTP 200 on agent timeouts — a basic error.</li>
+  <li><strong>Friction:</strong> Forgot to load env vars during setup config. Had to rework from <code>python-rq</code> to QStash mid-development, burning AI credits that could have been used for review loops.</li>
+  <li><strong>Prompt history:</strong> All working prompts archived in <code>working_prompts/</code>.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2>12. Future Improvements</h2>
+
+<ol>
+  <li><strong>Evals suite:</strong> Systematic benchmarking of agent responses against ground-truth queries. No evaluation framework exists today.</li>
+  <li><strong>Cache invalidation:</strong> Replace TTL with data-update-triggered invalidation. Pre-synthesize cache for high-frequency topics.</li>
+  <li><strong>Faster model:</strong> Replace <code>deepseek-v4-flash</code> with a lighter model (e.g., <code>gpt-4o-mini</code>, <code>gemini-2.0-flash-lite</code>) for lower latency.</li>
+  <li><strong>Raw SQL access:</strong> Read replica with parameterized raw SQL would allow complex queries in a single call vs. multiple ORM calls.</li>
+  <li><strong>Redis vector search:</strong> Replace O(n) Python cosine similarity scan with RediSearch HNSW index.</li>
+  <li><strong>Multi-agent (if justified):</strong> Add a supervisor agent only if the tool set grows beyond 5-6 tools or the agent needs long-term memory.</li>
+  <li><strong>Fix Langfuse tracing:</strong> Debug Vercel deployment integration.</li>
+</ol>
+
+<div class="footnote">
+  Generated from: <code>scripts/preprocess.py</code> · <code>scripts/clean_docs.py</code> · <code>src/agent/graph.py</code> · <code>src/agent/tools.py</code> · <code>src/agent/models.py</code> · <code>src/agent/prompts/system.md</code> · <code>src/cache/cache.py</code> · <code>src/api/main.py</code> · <code>src/internal/db/models.py</code>
+</div>
+
+</div>
+<script>mermaid.initialize({startOnLoad:true,theme:'dark',themeVariables:{primaryColor:'#1e293b',primaryTextColor:'#e2e8f0',primaryBorderColor:'#334155',lineColor:'#38bdf8',secondaryColor:'#0f172a',tertiaryColor:'#1e3a5f',fontSize:'14px'}});</script>
+</body>
+</html>
