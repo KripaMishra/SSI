@@ -49,5 +49,14 @@ The core components include
 4. Latency is higher bcs we're using deepseek-v4-flash, definately an overkill for the objective and objectively slower, why use it then ? resource constraints on gemini-flash-lite. 
 5. Using a read replica of the structured database could permit raw qery execution that could technically allow large and more complex queries to be run in one go, currently the query is wrapped in an ORM that limits the capabilities and thus leading to repeated tool calls. Ultimately a call on standards adhered by the company.
 6. Lack of evals and prompt benchmarking.
+7. The tracing is broken in vecel deployment would debug it if allowed by time. 
+8. Had to rework the message-queuing from python-rq to qstash led to rework and refactors and thus burned through AI credits thus, couldn't run a any dedicated review loops via agent.
 
 <!-- Note compromises, assumptions, and what you would improve with more time. -->
+
+
+
+reference content from PRD is given below, it explains what to document in approach.md along with some pointers that i documented for the development and planning life-cycle use this to draft final version of approach.md  
+```txt
+Submit an approach document (max 2-3 pages) covering: Section A — Problem Decomposition: what analytical question types the solution should support and the specific structured output each should produce. Section B — Solution & Agentic Construct Design: the methods you chose and why, plus an explicit agentic construct — named steps with their inputs, outputs, handoffs, and failure paths. Section C — Data Interaction Design: how the system accesses the datasets, stays schema-aware, and performs aggregations (time grain, dimensional hierarchy, metric derivation). Section D — Risk Awareness & Trade-Off Reasoning: one risk each for incorrect query generation, hallucinated responses, and data misinterpretation — each with a concrete mitigation — and one explicit design trade-off you made
+```
