@@ -22,6 +22,10 @@ class AgentTimeoutError(Exception):
     pass
 
 
+class ResponseValidationError(Exception):
+    pass
+
+
 try:
     from langfuse import Langfuse
     from langfuse.langchain import CallbackHandler
@@ -43,6 +47,22 @@ def _load_system_prompt() -> str:
     prompt = path.read_text(encoding="utf-8")
     logger.debug("loaded system prompt", extra={"length": len(prompt), "file": str(path)})
     return prompt
+
+
+def _validate_response(response: AgentResponse) -> None:
+    if response.intent == "WHY" and not response.citations:
+        raise ResponseValidationError("WHY intent requires non-empty citations")
+    if response.intent == "WHAT_TO_DO" and response.status != "PENDING_APPROVAL":
+        raise ResponseValidationError("WHAT_TO_DO intent requires status=PENDING_APPROVAL")
+
+
+def _tool_calls_have_errors(state: MessagesState) -> bool:
+    for msg in state["messages"]:
+        if hasattr(msg, "additional_kwargs") and msg.additional_kwargs.get("tool_error"):
+            return True
+        if hasattr(msg, "content") and isinstance(msg.content, str) and "tool_error" in msg.content:
+            return True
+    return False
 
 
 def build_agent(config: AgentConfig | None = None) -> CompiledStateGraph:
@@ -74,6 +94,9 @@ def build_agent(config: AgentConfig | None = None) -> CompiledStateGraph:
     def finalize(state: MessagesState) -> dict:
         last = state["messages"][-1]
         raw = last.content if hasattr(last, "content") else str(last)
+
+        has_tool_errors = _tool_calls_have_errors(state)
+
         try:
             schema = {
                 "answer": "str — final answer text",
@@ -87,17 +110,19 @@ def build_agent(config: AgentConfig | None = None) -> CompiledStateGraph:
                 + state["messages"]
                 + [{"role": "user", "content": f"Reformat the above conversation into valid JSON. Use ONLY these exact fields:\n{json.dumps(schema, indent=2)}\n\nEnsure intent, status, citations, and confidence are all present and match the allowed values."}]
             )
+
+            if has_tool_errors:
+                validated.status = "ERROR"
+
+            _validate_response(validated)
+
             return {"messages": [{"role": "assistant", "content": validated.model_dump_json()}]}
+        except ResponseValidationError:
+            logger.exception("response validation failed")
+            raise
         except Exception:
             logger.exception("structured output validation failed", extra={"raw": str(raw)[:300]})
-            fallback = AgentResponse(
-                answer=str(raw),
-                intent="WHAT",
-                citations=[],
-                confidence=0.5,
-                status="OK",
-            )
-            return {"messages": [{"role": "assistant", "content": fallback.model_dump_json()}]}
+            raise ResponseValidationError("Failed to produce a valid structured response")
 
     tool_node = ToolNode(tools)
 
