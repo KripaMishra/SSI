@@ -1,0 +1,6 @@
+### REview fixes
+1. brotha, the sentinal values that you flagged are still marked as ok for eg, 9999 is marked ok, that's incorrect. mark all the sentinal values + the negatives to null, and make the the flag more contextual so that the LLM can reason over it and reduce the confidence score due to faulty values. while you update the pre-processing pipeline document each change, and rows affected very briefly. in the reconciliation.md it'll be used later to document the project. 
+also just cross check if you dropped only one of the duplicate pair rows, not both. 
+2. Update the query tool to add advance query filters such as joins, pagination, filters, , limits, aggregation and ordering + other fields that might be relevant to oneshot the exact aggregated data. 
+3. we need to enforce the response behaviours, for `why`--> `citations` mandatory, `what to` do`--> status = `pending_approval` mandatory. Also some tool errors are still producing status=OK, that's wrong. also the fallback resposne behaviour is worng, just raise error instead of returning a misleading response. 
+4. Also the query tool citiations only mention the tables, we need to also mention the query params so that the reproducability and replayblity is in place.
