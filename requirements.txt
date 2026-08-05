@@ -14,3 +14,7 @@ langchain-openai>=1.4.0
 fastapi>=0.141.0
 uvicorn>=0.52.0
 langfuse>=4.14.0
+qstash>=3.4.0
+redis>=5.0.0
+python-dotenv>=1.0.0
+httpx>=0.28.0
