@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from fakeredis import FakeStrictRedis
 from fastapi.testclient import TestClient
-from src.api.main import app, _cache, _redis_conn, _qstash, _receiver
+from src.api.main import app, _cache, _redis_conn, _qstash
 from src.agent.models import AgentResponse
 
 client = TestClient(app)
@@ -75,7 +75,6 @@ class TestWebhookProcess(TestCase):
         self.fake_redis = FakeStrictRedis(decode_responses=True)
         _cache._client = self.fake_redis
 
-        # Patch _redis_conn on the module
         import src.api.main as api_mod
         self._orig_redis = api_mod._redis_conn
         api_mod._redis_conn = self.fake_redis
@@ -91,7 +90,9 @@ class TestWebhookProcess(TestCase):
         self.assertEqual(response.status_code, 401)
 
     def test_webhook_missing_question(self):
-        with patch.object(_receiver, "verify", return_value=None):
+        with patch("src.api.main._get_receiver") as mock_get_rec:
+            mock_rec = MagicMock()
+            mock_get_rec.return_value = mock_rec
             response = client.post(
                 "/webhook/process",
                 json={},
@@ -103,9 +104,10 @@ class TestWebhookProcess(TestCase):
         question = "Why did SparkClean 1kg spike?"
         agent_resp = _mock_agent_response(question)
 
-        with patch.object(_receiver, "verify", return_value=None), \
+        with patch("src.api.main._get_receiver") as mock_get_rec, \
              patch("src.api.main.run_agent", return_value=agent_resp):
-
+            mock_rec = MagicMock()
+            mock_get_rec.return_value = mock_rec
             response = client.post(
                 "/webhook/process",
                 json={"question": question},
@@ -117,7 +119,6 @@ class TestWebhookProcess(TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertTrue(response.json()["ok"])
 
-            # Result should be in Redis
             raw = self.fake_redis.get("qstash_result:msg-001")
             self.assertIsNotNone(raw)
             data = json.loads(raw)
@@ -125,9 +126,10 @@ class TestWebhookProcess(TestCase):
             self.assertEqual(data["response"]["intent"], agent_resp.intent)
 
     def test_webhook_failure_stores_error(self):
-        with patch.object(_receiver, "verify", return_value=None), \
+        with patch("src.api.main._get_receiver") as mock_get_rec, \
              patch("src.api.main.run_agent", side_effect=Exception("Agent crashed")):
-
+            mock_rec = MagicMock()
+            mock_get_rec.return_value = mock_rec
             response = client.post(
                 "/webhook/process",
                 json={"question": "any question"},
@@ -147,9 +149,10 @@ class TestWebhookProcess(TestCase):
 
     def test_webhook_agent_timeout(self):
         from src.agent.graph import AgentTimeoutError
-        with patch.object(_receiver, "verify", return_value=None), \
+        with patch("src.api.main._get_receiver") as mock_get_rec, \
              patch("src.api.main.run_agent", side_effect=AgentTimeoutError()):
-
+            mock_rec = MagicMock()
+            mock_get_rec.return_value = mock_rec
             response = client.post(
                 "/webhook/process",
                 json={"question": "any question"},

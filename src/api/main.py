@@ -30,21 +30,29 @@ logger = get_logger(__name__)
 
 _cache = SemanticCache()
 
-def _get_redis():
-    return redis.Redis.from_url(UPSTASH_REDIS_URL, decode_responses=True)
+_redis_conn = redis.Redis.from_url(UPSTASH_REDIS_URL, decode_responses=True)
+_qstash = QStash(token=os.getenv("QSTASH_TOKEN"))
+_receiver = None
+_QSTASH_SIGNING_KEYS_FETCHED = False
 
-def _get_qstash():
-    return QStash(token=os.getenv("QSTASH_TOKEN"))
 
 def _get_receiver():
-    return Receiver(
-        current_signing_key=os.getenv("QSTASH_CURRENT_SIGNING_KEY"),
-        next_signing_key=os.getenv("QSTASH_NEXT_SIGNING_KEY"),
-    )
-
-_redis_conn = _get_redis()
-_qstash = _get_qstash()
-_receiver = _get_receiver()
+    global _receiver, _QSTASH_SIGNING_KEYS_FETCHED
+    if _receiver is not None:
+        return _receiver
+    if not _QSTASH_SIGNING_KEYS_FETCHED:
+        _QSTASH_SIGNING_KEYS_FETCHED = True
+        try:
+            keys = _qstash.signing_key.get()
+            current_key = keys.current
+            next_key = keys.next
+            logger.info("signing keys fetched from QStash API")
+        except Exception as exc:
+            current_key = os.getenv("QSTASH_CURRENT_SIGNING_KEY")
+            next_key = os.getenv("QSTASH_NEXT_SIGNING_KEY")
+            logger.warning("failed to fetch signing keys, using env fallback", extra={"error": str(exc)})
+        _receiver = Receiver(current_signing_key=current_key, next_signing_key=next_key)
+    return _receiver
 
 app = FastAPI(title="SSI Agent API")
 
@@ -146,10 +154,9 @@ async def process_webhook(request: Request):
     signature = request.headers.get("Upstash-Signature", "")
 
     try:
-        _receiver.verify(
+        _get_receiver().verify(
             signature=signature,
             body=raw_body.decode("utf-8"),
-            url=str(request.url),
         )
     except Exception as e:
         logger.warning("QStash signature verification failed", extra={"error": str(e)})
