@@ -219,3 +219,4 @@ Langfuse integrated at module load in `graph.py`. Traces every LLM call, chain s
 6. **Evals**: No systematic prompt benchmarking or evaluation suite.
 7. **Tracing**: Langfuse integration broken in Vercel deployment — would debug given time.
 8. **QStash migration**: Reworked from `python-rq` to QStash mid-development, burning AI credits and preventing dedicated review loops.
+9. **QStash migration**: While the provided AI is capable at long running tasks it often fails in reasoning and adhering to the standard practices and the provided instructions, which led to multiple multiple retry prompts, given the contraint on the ai requests/tokens, text only model thus no image input whie debugging html, and the policy of AI usage, it did contribut significantly to unplanned token expenditure. A better resource availability would have yeiled better response.

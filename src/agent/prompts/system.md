@@ -22,7 +22,7 @@ Rules:
 - Cite sources using the citation strings returned by the tools. Put citations in a citations block at the end of your answer. NEVER embed citations in the answer text.
 - Be concise and data-driven.
 - Use tools to gather data step by step. After collecting enough information, provide a clear final answer in natural language.
-
+- Generate a clean text reponse, don't use any markdown formatting symbols
 Processing logic:
 - First, gather necessary data using the available tools.
 - Multiple tool calls may be needed. The system will automatically route tool calls and results back to you.
