@@ -2,61 +2,220 @@
 
 ## Problem Summary
 
-The objective is to create an assistant that answers What / Why / What-to-do questions over the provided structured and unstructured data. 
+Create an assistant that answers **What / Why / What-to-do** questions over structured sales data (8 CSV tables, 52 weeks, 5 product categories, 12 territories) and unstructured text documents (30 email/note files). The system must handle data quality issues, support causal analysis with citations, and defer recommendations for human approval.
 
-The PRD also provides two sample test queries : (1) "Why did SparkClean 1kg primary sales spike in Mumbai in the week of 16 Sep 2025?" (2) "What were GlucoJoy's monthly primary sales vs target in the North region in November 2025?"
+Three core question types:
+- **WHAT** — factual queries (e.g., "What were GlucoJoy's monthly primary sales vs target in North in Nov 2025?")
+- **WHY** — causal analysis with mandatory citations (e.g., "Why did SparkClean 1kg spike in Mumbai in Sep 2025?")
+- **WHAT_TO_DO** — recommendations returned with `PENDING_APPROVAL` status
 
-The PRD also asks for a `multi-agent` system. 
+---
 
-The core components include 
-1. Data interaction layer
-2. Agent runtime loop 
-
-<!-- Describe the problem you are solving and the key constraints. -->
 ## Technical Approach
 
-0. Data cleaning csv: Inconsistencies found, and the approach taken to clean the structued data. 
-1. Data modelling approach for structured data.
-2. Mention the decision to keep the values such as -1, 9999 to deliberately, point out the fault data. Also ensure the agent prompt has this instruction to use the added flag in the csv data, and thus assuming that data is faulty and not sufficient to make a conclusion.
-2. Text data cleaning approach. PII redaction, Chunking choice of 1 chunk per text file. 
-3. Logic for extracting the metaadata and using it for filtering the data, to improve retrieval. 
-4. Mounted retrieval tools  {numer of tools}
-5. Using a sinlge agent architecture with data base querying tools, recusively calling the tools, added timeout to prevent infinite recursion. Better apporach should be implemented depeneding on the exact use-case, timeout to be reduced based on how we serve the api in production. 
-6. using a message queue to handle high traffic. 
-7. using semantic caching to reduce the LLM api calls. 
-8. The current approach for the Cache invalidation is very naive as it only uses TTLs. A rather better versions would use invalidating on data updates. Better cache synthesis on the basis of frequent topics discussed --> pre-synthesised cache --> invalidated on data update. 
-9. Mermaid diagram of the actual architecture, ERD of data modelling logic.
-10. Langfuse for tracing. 
+### 0. Data Cleaning
 
-<!-- Outline your solution architecture, data pipeline, and implementation steps. -->
-    
+| Issue | Table | Rows Affected | Fix |
+|---|---|---|---|
+| Multiple date formats (4) | fact_primary_sales | 10,972 | Normalized to `YYYY-MM-DD` |
+| Non-numeric sales value (`"Rs 1,234"`) | fact_primary_sales | 9,416 | Extracted numeric portion |
+| 9999 sentinel in units | fact_primary_sales | 771 | → NULL, flag = `sentinel_9999` |
+| Negative values in units | fact_primary_sales | 734 | → NULL, flag = `negative` |
+| -9999 sentinel in units | fact_primary_sales | 1 | → NULL, flag = `sentinel_-9999` |
+| Duplicate rows (23 pairs) | fact_primary_sales | 23 omitted | Keep first, rest→`omitted/` |
+| Territory `BLR`/`BGL`/`Bombay` | 4 tables | ~190 | Mapped to `Bengaluru`/`Mumbai` |
+| Distributor ID leading `0` | fact_primary_sales | 24 IDs | Stripped `lstrip("0")` |
+| SKU tier abbreviations | dim_sku | 8→3 values | Lowercased, `val`→`value`, `prem`→`premium` |
+| Region abbreviations | dim_geo | 2 values | `S`→`South`, `E`→`East` |
+| `territory == "North"` (region) | promotions | 1 omitted | Moved to `omitted/` |
+| Missing rep_name | dim_rep | 1 | Filled from `rep_id` |
+
+### 1. Data Modelling
+
+Star schema: 4 dimension tables (`dim_geo`, `dim_sku`, `dim_rep`, `dim_distributor`) + 2 fact tables (`fact_primary_sales`, `fact_targets`) + 2 supporting tables (`promotions`, `stockouts`). Relationships enforced via foreign keys.
+
+```mermaid
+erDiagram
+    dim_geo ||--o{ dim_rep : ""
+    dim_geo ||--o{ dim_distributor : ""
+    dim_geo ||--o{ fact_primary_sales : ""
+    dim_geo ||--o{ fact_targets : ""
+    dim_geo ||--o{ promotions : ""
+    dim_geo ||--o{ stockouts : ""
+    dim_sku ||--o{ fact_primary_sales : ""
+    dim_sku ||--o{ fact_targets : ""
+    dim_sku ||--o{ promotions : ""
+    dim_sku ||--o{ stockouts : ""
+    dim_distributor ||--o{ fact_primary_sales : ""
+
+    dim_geo {
+        string territory PK
+        string region
+    }
+    dim_sku {
+        string sku_code PK
+        string category
+        string brand
+        string sku_name
+        string pack_size
+        string flavour
+        string tier
+        string base_mrp
+    }
+    dim_rep {
+        string rep_id PK
+        string rep_name
+        string territory FK
+    }
+    dim_distributor {
+        string distributor_id PK
+        string distributor_name
+        string territory FK
+    }
+    fact_primary_sales {
+        date week_start PK
+        string sku_code PK FK
+        string territory PK FK
+        string distributor_id PK FK
+        int primary_sales_units "nullable"
+        float primary_sales_value
+        string sales_units_flag
+    }
+    fact_targets {
+        date month PK
+        string material_no PK FK
+        string area PK FK
+        float target_value
+    }
+    promotions {
+        date week_start PK
+        string sku PK FK
+        string territory PK FK
+        string promo_type
+        float promo_discount_pct
+    }
+    stockouts {
+        date week_start PK
+        string item_code PK FK
+        string territory PK FK
+        string stockout_flag
+        int stockout_days
+    }
+```
+
+### 2. Sentinel & Negative Handling
+
+Sentinel values (9999, -9999) and negative values in `primary_sales_units` are **nulled** rather than removed. Each nulled row carries a `sales_units_flag` column (`sentinel_9999`, `sentinel_-9999`, `negative`, or `ok`) so the agent can identify unreliable data points and adjust confidence in its conclusions. The system prompt explicitly instructs the agent to use this flag.
+
+### 3. Text Data Cleaning
+
+All 30 `.txt` documents processed through a PII redaction pipeline:
+- **Phones**: `+91XXXXXXXXXX` → `<REDACTED_PHONE>` (4 redactions)
+- **Emails**: `name@domain.com` → `<REDACTED_EMAIL>` (4 redactions)
+- **Names**: `From:` header + action-verb context → `<REDACTED_NAME>` (4 redactions)
+- **Chunking**: 1 chunk per document (documents are short notes/emails, no semantic splitting needed)
+- **Metadata extraction**: category, ref, tags, attributes, redaction counts
+
+### 4. Retrieval & Tools
+
+Three tools mounted to the agent:
+
+| Tool | Purpose | Data Source |
+|---|---|---|
+| `search_docs` | Semantic search over unstructured docs | ChromaDB (Gemini embeddings, 1536d) |
+| `describe_database` | Schema discovery for the LLM | SQLAlchemy ORM introspection |
+| `query_database` | SQL-like query builder with filters, joins, aggregation, pagination | SQLite/PostgreSQL via ORM |
+
+### 5. Agent Architecture
+
+Single-agent tool loop (LangGraph `StateGraph`):
+
+```mermaid
+flowchart TD
+    START --> llm_call
+    llm_call -->|tool_calls present| tool_node
+    llm_call -->|no tool_calls| finalize
+    tool_node --> llm_call
+    finalize --> END
+
+    subgraph "Agent Runtime"
+        llm_call["LLM Call<br/>(deepseek-v4-flash)"]
+        tool_node["Tool Node<br/>(search_docs / describe_database / query_database)"]
+        finalize["Finalize<br/>(Structured Output → AgentResponse)"]
+    end
+
+    subgraph "Validation"
+        finalize --> validate["_validate_response()<br/>• WHY → citations mandatory<br/>• WHAT_TO_DO → PENDING_APPROVAL<br/>• Tool errors → ERROR"]
+    end
+```
+
+- **Timeout**: 180s, enforced via `ThreadPoolExecutor`
+- **Multi-agent avoided**: single agent with tool loop reduces complexity, latency, and token waste vs. multi-agent supervision
+- **Structured output**: two-pass — LLM gathers data via free-form tool calls, then a second invocation reformats into validated `AgentResponse` JSON
+
+### 6. Message Queue (QStash)
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant FastAPI
+    participant Redis
+    participant QStash
+    participant Webhook
+    participant Agent
+
+    Client->>FastAPI: POST /ask {question}
+    FastAPI->>Redis: SemanticCache.get(question)
+    alt Cache HIT
+        Redis-->>FastAPI: cached response
+        FastAPI-->>Client: 200 OK
+    else Cache MISS
+        FastAPI->>QStash: enqueue(question)
+        QStash-->>FastAPI: message_id
+        FastAPI-->>Client: 202 Accepted
+        FastAPI->>Redis: poll(qstash_result:{id})
+        
+        QStash->>Webhook: POST /webhook/process
+        Webhook->>Webhook: verify Upstash-Signature
+        Webhook->>Agent: run_agent(question)
+        Agent-->>Webhook: AgentResponse
+        Webhook->>Redis: SET qstash_result:{id} + TTL
+        Redis-->>FastAPI: result available
+        FastAPI->>Redis: SemanticCache.set(response)
+        FastAPI-->>Client: 200 OK
+    end
+```
+
+### 7. Semantic Caching
+
+- **Embedding model**: `gemini-embedding-2` (1536d)
+- **Similarity threshold**: 0.97 (cosine)
+- **Storage**: Redis hashes with TTL (600s default)
+- **Cache promotion**: hit refreshes TTL (hot-cache)
+- **Limitation**: Current TTL-based invalidation is naive. Better approach: invalidate on data update events + pre-synthesize cache for frequent topics
+
+### 8. Tracing
+
+Langfuse integrated at module load in `graph.py`. Traces every LLM call, chain step, and tool invocation. Falls back silently if unconfigured.
+
+---
+
 ## AI Tool Usage
-1. Usind OC as primary coding agent. 
-2. Attached prompts used in working_prompts/
-3. The token generation is very quick, but the harness itself is not to my liking. had to prompt to use the ctxMode extension instead of it discoving and using it by default. Also missing very basic checks such as not updating the dependencies, OC has LSP support inbuilt but it ignored a lot issues and only picked them when explicitly asked. Forgot to load the env vars while setting up the configs (very primitive error) 
-4. The documentation lookup is efficient when explicitly mentioning the source doc. but adherence to it is still questionable, it ended up using a deprecated fucntionality from langGraph, that too.. after being flagged by the LSP. also ended up using manual json parsing instead of using direct structured response. fixed only on flagging.
-5.  Very minor mishandling such as returning 200 status code on timeouts is wilddd. 
-6. apart from These critiques, it is good at long running tasks when specified properly, so providing large chunks of tasks with step-by-step breakdown is efficient and managable.
 
+- **Primary agent**: OpenCode (Cadra) with `ctxMode` extension for context management
+- **Strengths**: Long-running multi-step tasks when specified with step-by-step breakdowns; efficient documentation lookup when source is explicitly mentioned
+- **Weaknesses**: Doesn't auto-detect `ctxMode`; misses LSP warnings unless explicitly flagged; used deprecated LangGraph APIs; returned 200 on timeouts
+- **Prompt history**: Attached in `working_prompts/`
 
-<!-- Document how you used Cadra (OpenCode) during development — prompts, iterations, and what worked. -->
+---
 
 ## Trade-offs & Limitations
 
-1. Assumed the scope of the agent to be a stateless agent, with ability to query the database and reason over it to generate the responses, thus couldn't justify using a multi-agent system that would introduce a lot of complexity in terms of agent interactions, supervision, state-management, decision boundaries, excessive token consumption and higher latency. Effectively ended up using a single agent with tool loop.
-2. A lot of inconsistencies in the dataset, sepcifically in sales numbers, better documentation/context of these  inconsistencies would have helped salvage some of thees data points, ateleast better handling [TBD]
-3. The symantic cache is effective just in place to establish the methodology. A better approach would be handle the cache invalidation [mention the eact approach]
-4. Latency is higher bcs we're using deepseek-v4-flash, definately an overkill for the objective and objectively slower, why use it then ? resource constraints on gemini-flash-lite. 
-5. Using a read replica of the structured database could permit raw qery execution that could technically allow large and more complex queries to be run in one go, currently the query is wrapped in an ORM that limits the capabilities and thus leading to repeated tool calls. Ultimately a call on standards adhered by the company.
-6. Lack of evals and prompt benchmarking.
-7. The tracing is broken in vecel deployment would debug it if allowed by time. 
-8. Had to rework the message-queuing from python-rq to qstash led to rework and refactors and thus burned through AI credits thus, couldn't run a any dedicated review loops via agent.
-
-<!-- Note compromises, assumptions, and what you would improve with more time. -->
-
-
-
-reference content from PRD is given below, it explains what to document in approach.md along with some pointers that i documented for the development and planning life-cycle use this to draft final version of approach.md  
-```txt
-Submit an approach document (max 2-3 pages) covering: Section A — Problem Decomposition: what analytical question types the solution should support and the specific structured output each should produce. Section B — Solution & Agentic Construct Design: the methods you chose and why, plus an explicit agentic construct — named steps with their inputs, outputs, handoffs, and failure paths. Section C — Data Interaction Design: how the system accesses the datasets, stays schema-aware, and performs aggregations (time grain, dimensional hierarchy, metric derivation). Section D — Risk Awareness & Trade-Off Reasoning: one risk each for incorrect query generation, hallucinated responses, and data misinterpretation — each with a concrete mitigation — and one explicit design trade-off you made
-```
+1. **Single vs. multi-agent**: Chose single agent with tool loop. Multi-agent would introduce supervision overhead, state management complexity, excessive token consumption, and higher latency without clear benefit for this scope.
+2. **Data inconsistencies**: Many sales number anomalies lack documentation. Better source context could salvage some data points with more nuanced handling.
+3. **Cache invalidation**: Current TTL-only approach is naive. Production version should invalidate on data update events and pre-synthesize responses for frequent topics.
+4. **Model choice**: `deepseek-v4-flash` is overkill and slower than needed. Used due to resource constraints on `gemini-flash-lite`.
+5. **Query ORM wrapper**: Current query builder limits complex SQL. A read replica with raw query execution would enable larger, more complex queries in a single call.
+6. **Evals**: No systematic prompt benchmarking or evaluation suite.
+7. **Tracing**: Langfuse integration broken in Vercel deployment — would debug given time.
+8. **QStash migration**: Reworked from `python-rq` to QStash mid-development, burning AI credits and preventing dedicated review loops.
