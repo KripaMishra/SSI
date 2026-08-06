@@ -1,48 +1,86 @@
-# F1 Capstone Template
+# SSI Sales Intelligence Agent
 
-Starter repository for the Cadra F1 walking-skeleton capstone. Use OpenCode with the Cadra provider to build your solution, document your approach, and submit a public GitHub repo for evaluation.
+An API that answers sales questions over structured sales data and supporting notes. It handles factual (`WHAT`), causal (`WHY`), and recommendation (`WHAT_TO_DO`) questions, returning citations, confidence, and a response status.
 
-## Prerequisites
+## Features
+
+- SQL-backed analysis of sales, targets, promotions, stockouts, products, territories, reps, and distributors
+- Semantic search over cleaned business notes
+- Structured responses with citations and confidence scores
+- Optional Redis semantic caching
+- Direct execution through FastAPI or asynchronous processing through QStash
+
+## Requirements
 
 - Python 3.11+
-- [OpenCode](https://opencode.ai) ≥ 1.17.0
-- A Cadra JWT (`CADRA_TOKEN`) from the F1 Setup page
-- Your Cadra proxy URL (from the F1 Setup page)
+- A Gemini API key for embeddings
+- An OpenAI-compatible model endpoint for the agent
+- PostgreSQL, Redis, ChromaDB Cloud, and QStash for the hosted setup
+
+SQLite, local ChromaDB, and direct requests can be used for local development where supported.
 
 ## Setup
 
-1. Clone this repo (or use it as a GitHub template).
-2. Set the environment variables (both values come from the F1 Setup page):
-   ```bash
-   export CADRA_PROXY_URL=<your-proxy-url>   # e.g. https://your-proxy.example.com/v1
-   export CADRA_TOKEN=<your-cadra-jwt>
-   ```
-   `opencode.json` reads both via `{env:…}` — no file edits needed.
-3. Install OpenCode if not already installed (see [opencode.ai](https://opencode.ai)).
-4. Run OpenCode in this directory:
-   ```bash
-   opencode
-   ```
-5. Complete `APPROACH.md` and implement your solution in `src/` (start with `src/solution.py`).
-6. Push your work to a **public** GitHub repository.
-7. Submit your repo URL on the F1 demo page.
-
-## Python environment (optional)
-
 ```bash
 python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
+source .venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env
 ```
+
+Set the values needed for the integrations you plan to use in `.env`. Do not commit `.env` or credentials.
+
+Start the API:
+
+```bash
+uvicorn src.api.main:app --reload
+```
+
+The API is available at `http://127.0.0.1:8000`. FastAPI documentation is available at `/docs`.
+
+## API
+
+### Direct request
+
+Use `/ask-direct` for local or synchronous execution:
+
+```bash
+curl -X POST http://127.0.0.1:8000/ask-direct \
+  -H 'Content-Type: application/json' \
+  -d '{"question":"Why did SparkClean 1kg sales spike in Mumbai?"}'
+```
+
+### Queued request
+
+Use `/ask` when QStash and Redis are configured. The endpoint enqueues the question, waits for the webhook result, and caches successful responses.
+
+QStash calls `/webhook/process`; configure the public webhook base URL and signing keys in `.env`.
+
+## Data
+
+- `Data/` contains the source tables and data dictionary.
+- `cleaned/` contains normalized tables used by the application.
+- `omitted/` contains rows excluded during cleaning.
+- `working_prompts/` contains the prompts used during development.
+
+The data model is a sales star schema with product, geography, rep, and distributor dimensions plus sales, targets, promotions, and stockout facts. See [`Data/DATA_DICTIONARY.md`](Data/DATA_DICTIONARY.md) and [`db.sql`](db.sql).
+
+## Tests
+
+```bash
+python -m unittest discover -s tests
+```
+
+Additional data-cleaning tests live under `src/tests/`.
 
 ## Project layout
 
-```
-.
-├── opencode.json    # Cadra provider config (reads CADRA_PROXY_URL + CADRA_TOKEN from env)
-├── APPROACH.md      # Your written approach (required for submission)
-├── src/
-│   └── solution.py  # Your solution code
-├── requirements.txt
-└── README.md
+```text
+src/api/          FastAPI routes
+src/agent/        Agent graph, tools, prompts, and response models
+src/cache/        Semantic cache and embeddings
+src/internal/db/  Database models, sessions, and vector search
+scripts/          Data cleaning, preprocessing, and embedding utilities
+tests/            API tests
+src/tests/        Data-cleaning tests
 ```
