@@ -100,8 +100,6 @@ python -m unittest discover -s tests
 
 Agent evals (golden question set + policy checks): `python tests/evals/run_evals.py --fake` runs offline against a scripted stub; omit `--fake` to run against the live agent.
 
-Additional data-cleaning tests live under `src/tests/`.
-
 ## Project layout
 
 ```text
@@ -110,6 +108,5 @@ src/agent/        Agent graph, tools, prompts, and response models
 src/cache/        Semantic cache and embeddings
 src/internal/db/  Database models, sessions, and vector search
 scripts/          Data cleaning, preprocessing, and embedding utilities
-tests/            API tests
-src/tests/        Data-cleaning tests
+tests/            API, cache, and data-cleaning tests
 ```
