@@ -79,7 +79,7 @@ The semantic cache is TTL-based (600s default) and is also invalidated explicitl
 curl -X POST http://127.0.0.1:8000/cache/invalidate
 ```
 
-No authentication is attached yet; API auth is tracked separately (issue #11). Pre-synthesizing cached responses for frequent topics is future work.
+Pre-synthesizing cached responses for frequent topics is future work.
 
 **Auth:** `/cache/invalidate` requires `X-API-Key: <token>` when `API_AUTH_TOKEN` is set — see [Authentication](#authentication).
 
