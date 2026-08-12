@@ -215,7 +215,7 @@ Langfuse integrated at module load in `graph.py`. Traces every LLM call, chain s
 1. **Single vs. multi-agent**: Chose single agent with tool loop. Multi-agent would introduce supervision overhead, state management complexity, excessive token consumption, and higher latency without clear benefit for this scope.
 2. **Data inconsistencies**: Many sales number anomalies lack documentation. Better source context could salvage some data points with more nuanced handling.
 3. **Cache invalidation**: Explicit invalidation via `POST /cache/invalidate` exists (call on data update events), but it is all-or-nothing and unauthenticated (#11 adds API auth). Pre-synthesizing responses for frequent topics remains future work.
-4. **Model choice**: `deepseek-v4-flash` is overkill and slower than needed. Used due to resource constraints on `gemini-flash-lite`.
+4. **Model choice**: `deepseek-v4-flash` stays the default. Resolved by live benchmark vs the fast-tier candidate `kimi-k2.6` (14-question golden set, 2026-08-12): candidate was slower (16.4 vs 9.9 min) and less accurate (12/14 vs 13/14, incl. a 180s response timeout). See `docs/MODEL_BENCHMARK.md`. Revisit if a fast-tier model beats flash on both axes.
 5. **Query ORM wrapper**: Current query builder limits complex SQL. A read replica with raw query execution would enable larger, more complex queries in a single call.
 6. **Evals**: No systematic prompt benchmarking or evaluation suite.
 7. **Tracing**: Langfuse integration broken in Vercel deployment — would debug given time.
