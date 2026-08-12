@@ -25,8 +25,8 @@ counts that correct `APPROACH.md`/`ARTEFACT.md` are marked **†**.
 | 7 | Distributor ID leading zeros | 9,382 **†** | fixed |
 | 8 | Master-dimension inconsistencies (tier, region, rep_name) | 8+2+1 values | fixed |
 | 9 | `dim_sku` duplicated master rows (case/whitespace) | 2 logical SKUs | **NOT addressed** |
-| 10 | Value/units inconsistency (implied price ≫ MRP) | 16 | **NOT addressed** |
-| 11 | Synthetic value construction (0.75 × MRP × units) | 59,319 of 59,348 | informational |
+| 10 | Value/units inconsistency (implied price ≫ MRP) | 15 | **NOT addressed** |
+| 11 | Synthetic value construction (0.75 × MRP × units) | 58,234 of 58,262 | informational |
 | 12 | Diffuse missing units | 2,186 | nulled (value kept) |
 | 13 | Outlier weeks (Oct 2025 festival block) | 4 weeks, z≈3 | **NOT addressed** |
 | 14 | Right-skewed units distribution | whole table | informational |
@@ -69,8 +69,8 @@ counts that correct `APPROACH.md`/`ARTEFACT.md` are marked **†**.
   Guwahati 72, Delhi 72, Patna 71; top SKU HC-006 16, CO-005 14 — no systematic cluster.
 - **Current handling:** → NULL, `sales_units_flag = 'sentinel_9999' / 'sentinel_-9999'`.
 - **Salvage:** *partially.* The retained `primary_sales_value` implies the sentinel rows had
-  realistic volumes: `value / (0.75 × base_mrp)` median ≈ **452 units** (vs. dataset median
-  584) — i.e. the sentinel replaced a plausible mid-sized quantity, and the value column
+  realistic volumes: `value / (0.75 × base_mrp)` median ≈ **595 units** (vs. dataset median
+  579) — i.e. the sentinel replaced a plausible mid-sized quantity, and the value column
   remains usable. Only source context (why the export wrote 9999) could recover the exact
   volume.
 
@@ -141,28 +141,28 @@ counts that correct `APPROACH.md`/`ARTEFACT.md` are marked **†**.
   deduplicated.
 - **Repro:** see [Not addressed — repro](#not-addressed--repro-steps).
 
-### 10. Value/units inconsistency — 16 rows, NOT addressed
+### 10. Value/units inconsistency — 15 rows, NOT addressed
 - **Pattern:** `primary_sales_value / (units × base_mrp)` should be ≈0.75 everywhere
-  (see §11); 16 rows sit at **18.3–27.5×**, i.e. the value implies ~24–27× the recorded
+  (see §11); 15 rows sit at **18.0–20.6×** value/(units × base_mrp), i.e. the value implies 24.0–27.5× the recorded
   units (recorded units are all small: 4–58).
 - **Affected:** `fact_primary_sales` (both columns).
-- **Counts:** 16 of 59,348 valid rows (0.03 %); scattered over 15 different weeks and 10
+- **Counts:** 15 of 58,262 valid rows (0.03 %); scattered over 15 different weeks and 10
   territories (e.g. `NB-007` Guwahati 2026-05-12: 4 units vs ₹4,950 ≈ 110 implied units;
   `PF-009` Delhi 2025-09-23: 7 units vs ₹22,680 ≈ 189 implied units).
 - **Current handling:** **none** — no flag column covers value anomalies; these rows flow
   into value aggregates with ~25× inflated value. (Unit aggregates are unaffected — the
   national total of 38,630,596 units stands.)
-- **Salvage:** *yes.* 13 of 16 rows imply a quantity ≈ 24× recorded (24.0–24.7×), consistent
-  with **case-level entry where a case = 24 packs**; 3 rows are 25.0–27.5× (unexplained).
+- **Salvage:** *yes.* 12 of 15 rows imply a quantity ≈ 24× recorded (24.0–24.7×), consistent
+  with **case-level entry where a case = 24 packs**; 3 rows at 25.0, 27.0 and 27.5× (unexplained).
   Pack/case conversion factors from the source system would resolve them; absent that, they
   should at least be flagged like the unit flags.
 - **Repro:** see below.
 
 ### 11. Synthetic value construction — informational caveat
 - **Pattern:** `primary_sales_value = 0.75 × base_mrp × primary_sales_units` for
-  essentially the whole dataset: **54,853 of 59,348 valid rows exactly 0.75×**; a further
-  4,466 rows within ±₹1 rounding (ratio 0.7498–0.751); 13 rows 0.75–0.94; 16 rows §10.
-  Nothing between 0.94 and 18.3 — zero rows in (1.0, 2.5], zero rows < 0.5.
+  essentially the whole dataset: **53,849 of 58,262 valid rows exactly 0.75×**; a further
+  4,385 rows within ±₹1 rounding (ratio 0.7498–0.751); 13 rows at ratio 0.942; 15 rows §10.
+  Nothing between 0.942 and 18.0 — zero rows in (0.751, 0.94], zero rows < 0.5.
 - **Implication:** value carries no independent information beyond `units × MRP` (flat 25 %
   trade discount). Any "average realization", "price" or "margin" analysis will find a
   constant 0.75 by construction. Not an error — a data-generation property — but it caps
@@ -174,7 +174,7 @@ counts that correct `APPROACH.md`/`ARTEFACT.md` are marked **†**.
 - **Pattern:** `primary_sales_units` NA; `primary_sales_value` always present (2,186/2,186).
 - **Affected:** `fact_primary_sales`.
 - **Counts:** 2,186 raw (3.5 %); cleaned 3,692 (6.0 %) after §3/§4 nulling. Distribution is
-  flat: 25–47 nulls/week (mean 34.8), 189–203 per territory, top SKU 29 — no temporal or
+  flat: 25–47 nulls/week (mean 34.8), 158–203 per territory, top SKU 29 — no temporal or
   geographic cluster, consistent with random omission.
 - **Current handling:** left NULL (flag `ok`-excluded); value kept.
 - **Salvage:** *yes in principle* — given §11's price construction, value / (0.75 × MRP)
@@ -182,7 +182,7 @@ counts that correct `APPROACH.md`/`ARTEFACT.md` are marked **†**.
   this project chose to avoid. Better source context = the export that dropped the volumes.
 
 ### 13. Outlier weeks — Oct 2025 festival block, NOT addressed
-- **Pattern:** national weekly units (valid rows only) spike +2.9–3.0σ for **four
+- **Pattern:** national weekly units (valid rows only) spike +2.9–3.1σ for **four
   consecutive weeks** — 2025-10-07 … 2025-10-28 (678k–681k vs ~600k baseline). Lowest weeks:
   2026-03-03 (584k), 2025-07-22 (585k). Single-territory extreme: Mumbai 2025-10-07 at 3.3σ.
 - **Interpretation:** a 4-week sustained block is a **seasonal uplift, not a data error** —
@@ -195,8 +195,8 @@ counts that correct `APPROACH.md`/`ARTEFACT.md` are marked **†**.
 - **Repro:** see below.
 
 ### 14. Right-skewed units distribution — informational
-- **Pattern:** units mean 785 vs median 584 (raw valid) — moderate right skew. Per category:
-  Snacks 907/945 (mild left), Tea 727/721 (symmetric), Biscuits 562/488, Shampoo 573/488,
+- **Pattern:** units mean 663 vs median 579 (valid rows, sentinels/negatives excluded) — moderate right skew. Per category:
+  Snacks 907/945 (mild left), Tea 727/721 (symmetric), Biscuits 519/460, Shampoo 573/488,
   Detergent 610/516 (right-skewed).
 - **Concentration:** low — top-5 SKUs = 8.0 % of national units, top-1 = 1.6 %; no
   single-SKU or single-category dominance that would distort aggregates.
@@ -234,9 +234,9 @@ counts that correct `APPROACH.md`/`ARTEFACT.md` are marked **†**.
   rows** (`GJ-003` Delhi 2025-11-11 flag=1 days=5; `CO-004` Chennai 2026-03-10 flag=1
   days=4).
 - **Cross-validation (positive):** the stockout weeks show deep sales dips — `GJ-003` Delhi
-  22 units vs median 521 (−96 %); `CO-004` Chennai 30 vs 537 (−94 %) — so the stockout rows
+  22 units vs median 531 (−96 %); `CO-004` Chennai 30 vs 539 (−94 %) — so the stockout rows
   are credible where present. The one promo week (`SC-004` Mumbai) is that SKU's max week
-  (673 vs median 517, +30 %).
+  (673 vs median 532, +26 %).
 - **Limitation:** with 1 promo and 2 stockouts, neither table can explain the Oct 2025
   national peak (§13) or general variance. Absence of promotion coverage ≠ absence of
   promotions.
@@ -266,7 +266,7 @@ print(len(sku), sku['sku_code'].nunique(), n.nunique())   # 136 136 134
 print(sku[n.duplicated(keep=False)][['sku_code','sku_name','base_mrp']])
 ```
 
-**§10 value/units inconsistencies (16 rows)**
+**§10 value/units inconsistencies (15 rows)**
 ```python
 import pandas as pd
 raw = pd.read_csv('Data/fact_primary_sales.csv')
@@ -278,7 +278,7 @@ ok = raw[(u > 0) & (u < 9999)].copy()
 ok['code'] = ok['sku_code'].str.strip().str.lower()
 mrp = dict(zip(sku['sku_code'].str.strip().str.lower(), sku['base_mrp']))
 ok['ratio'] = ok['val'] / ok['primary_sales_units'] / ok['code'].map(mrp)
-print(len(ok[ok['ratio'] > 2.5]))                          # 16
+print(len(ok[ok['ratio'] > 2.5]))                          # 15
 print(ok[ok['ratio'] > 2.5][['week_start','sku_code','territory','primary_sales_units','primary_sales_value']])
 ```
 
@@ -286,7 +286,7 @@ print(ok[ok['ratio'] > 2.5][['week_start','sku_code','territory','primary_sales_
 ```python
 # same prep as §10; then:
 r = ok['val'] / ok['primary_sales_units'] / ok['code'].map(mrp)
-print((r.round(6) == 0.75).sum(), r.quantile([.01,.5,.99]).round(4).to_dict())  # 54853 / 0.75,0.75,0.75
+print((r.round(6) == 0.75).sum(), r.quantile([.01,.5,.99]).round(4).to_dict())  # 53849 / 0.75,0.75,0.75
 ```
 
 **§13 outlier weeks**
@@ -298,7 +298,7 @@ u = raw['primary_sales_units']
 v = raw[(u > 0) & (u < 9999)]
 wk = v.groupby('d')['primary_sales_units'].sum()
 z = (wk - wk.mean()) / wk.std()
-print(z[z.abs() > 2.5])     # 2025-10-07..10-28 block, z ≈ 2.9-3.0
+print(z[z.abs() > 2.5])     # 2025-10-07..10-28 block, z ≈ 2.9-3.1
 ```
 
 **§16 absent combos**
