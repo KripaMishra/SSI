@@ -70,6 +70,14 @@ class TestApiAuthEnabled(_AuthTestCase):
         )
         self.assertEqual(response.status_code, 401)
 
+    def test_ask_direct_non_ascii_key_rejected_not_500(self):
+        # Raw header bytes are latin-1 decoded by the server; compare_digest
+        # raises TypeError on non-ASCII str, so this must 401, never 500.
+        response = client.post(
+            "/ask-direct", json={"question": "test"}, headers={"X-API-Key": b"\xff\xfe"}
+        )
+        self.assertEqual(response.status_code, 401)
+
     def test_ask_direct_correct_key_accepted(self):
         response = client.post(
             "/ask-direct", json={"question": "test"}, headers={"X-API-Key": TOKEN}
