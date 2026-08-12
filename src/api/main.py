@@ -1,7 +1,8 @@
+import hmac
 import json
 import os
 import time
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Depends, Header
 from pydantic import BaseModel
 
 import redis
@@ -14,6 +15,7 @@ load_dotenv()
 from src.agent.models import AgentResponse
 from src.agent.graph import run_agent, AgentTimeoutError
 from src.agent.config import agent_config
+from src.internal.settings import settings
 from src.cache.cache import (
     SemanticCache,
     UPSTASH_REDIS_URL,
@@ -27,6 +29,22 @@ from src.cache.cache import (
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+# Empty = auth disabled (local dev). Read once at import; tests patch this
+# module attribute directly.
+API_AUTH_TOKEN = settings.api_auth_token
+
+
+def require_api_key(x_api_key: str | None = Header(default=None)):
+    """Reject requests without a valid X-API-Key when API_AUTH_TOKEN is set.
+
+    Empty API_AUTH_TOKEN = auth disabled (local dev, no header needed).
+    /webhook/process is exempt — it verifies the QStash signature instead.
+    """
+    if not API_AUTH_TOKEN:
+        return
+    if x_api_key is None or not hmac.compare_digest(x_api_key, API_AUTH_TOKEN):
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 _cache = SemanticCache()
 
@@ -95,7 +113,7 @@ async def log_requests(request: Request, call_next):
 
 
 @app.post("/ask", response_model=AgentResponse)
-def ask(ask_req: AskRequest, fast_req: Request):
+def ask(ask_req: AskRequest, fast_req: Request, _: None = Depends(require_api_key)):
     logger.info("processing /ask", extra={"question": ask_req.question[:200]})
 
     cached = _cache.get(ask_req.question)
@@ -202,11 +220,11 @@ async def process_webhook(request: Request):
 
 
 @app.post("/cache/invalidate")
-def invalidate_cache():
+def invalidate_cache(_: None = Depends(require_api_key)):
     """Invalidate all semantic cache entries. Call on data update events.
 
-    ponytail: no auth yet — webhook signature verification is QStash-specific;
-    #11 adds API auth for all endpoints.
+    Protected by X-API-Key when API_AUTH_TOKEN is set; /webhook/process is
+    exempt since it verifies the QStash signature.
     """
     _cache.clear()
     logger.info("semantic cache invalidated")
@@ -214,7 +232,7 @@ def invalidate_cache():
 
 
 @app.post("/ask-direct", response_model=AgentResponse)
-def ask_direct(request: AskRequest):
+def ask_direct(request: AskRequest, _: None = Depends(require_api_key)):
     logger.info("processing /ask-direct", extra={"question": request.question[:200]})
     try:
         response = run_agent(request.question, agent_config)
