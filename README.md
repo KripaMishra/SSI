@@ -71,6 +71,8 @@ The data model is a sales star schema with product, geography, rep, and distribu
 python -m unittest discover -s tests
 ```
 
+Agent evals (golden question set + policy checks): `python tests/evals/run_evals.py --fake` runs offline against a scripted stub; omit `--fake` to run against the live agent.
+
 Additional data-cleaning tests live under `src/tests/`.
 
 ## Project layout
