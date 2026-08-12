@@ -2,16 +2,17 @@
 
 ## Status
 
-Accepted (migrated from `python-rq` mid-development).
+Accepted (the queue was reworked to QStash mid-development; see APPROACH.md limitation #8).
 
 ## Context
 
 `POST /ask` receives a question and must return quickly while the agent runs for
 tens of seconds to minutes. An asynchronous queue is required: accept the request,
 process it in the background, and let the client poll for the result. The system
-initially used `python-rq`, then reworked to QStash during development (limitation
-#8 in APPROACH.md). The team operates a managed deployment (Vercel/FastAPI) where
-running a persistent worker process is friction.
+initially planned on `python-rq` (`task_plan.md`), then reworked to QStash during
+development before any RQ implementation shipped (limitation #8 in APPROACH.md).
+The team operates a managed deployment (Vercel/FastAPI) where running a
+persistent worker process is friction.
 
 ## Decision
 
@@ -35,7 +36,7 @@ Use **QStash** as the message queue:
 
 ## Alternatives considered
 
-- **`python-rq`** (initial choice): rejected/replaced — requires a self-hosted
+- **`python-rq`** (planned choice): rejected/replaced — requires a self-hosted
   worker process and Redis supervision; harder on a managed deployment.
 - **Celery**: rejected — far heavier than needed for one queue.
 - **Synchronous processing in the request**: rejected — blocks the client for the

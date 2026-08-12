@@ -6,8 +6,9 @@ Accepted (implemented; see APPROACH.md §7).
 
 ## Context
 
-Per-question agent latency is ~36–46s (see ADR-006), and users re-ask near-identical
-questions (paraphrases, follow-ups on the same topic) over a static dataset. Exact
+Per-question agent latency is ~36–46s (see ADR-006 and
+docs/MODEL_BENCHMARK.md), and users re-ask near-identical questions (paraphrases,
+follow-ups on the same topic) over a static dataset. Exact
 string caching cannot help because natural-language questions rarely match
 byte-for-byte. Limitation #3 in APPROACH.md documents the cache's invalidation
 design.
