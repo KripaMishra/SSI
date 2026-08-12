@@ -1,25 +1,50 @@
-# SSI Sales Intelligence Agent
+# SSI — Sales Intelligence Agent
 
-An API that answers sales questions over structured sales data and supporting notes. It handles factual (`WHAT`), causal (`WHY`), and recommendation (`WHAT_TO_DO`) questions, returning citations, confidence, and a response status.
+Ask sales questions in plain English; get SQL-backed answers with citations, confidence scores, and a response status. The agent handles factual (`WHAT`), causal (`WHY`), and recommendation (`WHAT_TO_DO`) questions over a star-schema sales dataset and cleaned business notes — either synchronously or through an async queue.
 
-## Features
+## Highlights
 
-- SQL-backed analysis of sales, targets, promotions, stockouts, products, territories, reps, and distributors
-- Semantic search over cleaned business notes
-- Structured responses with citations and confidence scores
-- Optional Redis semantic caching
-- Direct execution through FastAPI or asynchronous processing through QStash
+- **SQL-backed analysis** over sales, targets, promotions, stockouts, products, territories, reps, and distributors
+- **LangGraph single-agent tool loop**: classifies the question, then composes SQL or vector search as needed, and generates a cited answer
+- **Semantic caching** (Redis, cosine similarity ≥ 0.97, TTL): repeat questions are served without another model call
+- **Async by default**: `/ask` enqueues via QStash; a signature-verified webhook drives processing. `/ask-direct` is available for synchronous use
+- **Structured responses**: answer, citations, confidence, and status in one JSON payload
+- **Golden-set evals** with an offline fake mode — CI-friendly, no live model required
+- **Clean data pipeline**: raw tables → cleaned star schema → omitted-row audit trail (see `Data/`, `cleaned/`, `omitted/`)
 
-## Requirements
+## Architecture
 
-- Python 3.11+
-- A Gemini API key for embeddings
-- An OpenAI-compatible model endpoint for the agent
-- PostgreSQL, Redis, ChromaDB Cloud, and QStash for the hosted setup
+```
+            ┌────────────────────────────── async path ──────────────────────────────┐
+POST /ask ──▶ QStash queue ──▶ POST /webhook/process (Upstash-Signature verified) ──┤
+                                                                                     ▼
+POST /ask-direct ────────────────────────────────────────────────────────────▶ LangGraph agent
+                                                                                     │
+                                             classify → SQL (SQLAlchemy star schema) │
+                                             or semantic search (ChromaDB + Gemini)   │
+                                                                                     ▼
+                                         answer + citations + confidence ──▶ Redis semantic cache
+                                                                                     │
+                                                     Langfuse tracing (optional) ◀────┘
+```
 
-SQLite, local ChromaDB, and direct requests can be used for local development where supported.
+Key decisions (agent loop over multi-agent, QStash over a local task queue, cache threshold/TTL, PII redaction, model choice) are recorded in [`docs/adr/`](docs/adr/) as ADR-001…006. A technical deep-dive lives in [`APPROACH.md`](APPROACH.md).
 
-## Setup
+## Tech stack
+
+| Layer | Tech | Role |
+|---|---|---|
+| API | FastAPI | HTTP endpoints, auth, request handling |
+| Agent | LangGraph | Single-agent tool loop (classify → query → answer) |
+| Agent model | `deepseek-v4-flash` via OpenAI-compatible endpoint | Response generation |
+| Retrieval | ChromaDB + Gemini embeddings (1536-dim) | Semantic search over business notes |
+| Data layer | SQLAlchemy star schema | SQLite locally, PostgreSQL in production |
+| Cache | Redis semantic cache (cosine ≥ 0.97, TTL 600s) | Serve repeat questions without a model call |
+| Queue | QStash + Upstash Redis | Async processing with signed webhooks |
+| Observability | Langfuse (optional) | Trace agent runs |
+| Evals | Golden question set + policy runner | `tests/evals/`, fake or live mode |
+
+## Quickstart
 
 ```bash
 python -m venv .venv
@@ -36,28 +61,20 @@ Start the API:
 uvicorn src.api.main:app --reload
 ```
 
-The API is available at `http://127.0.0.1:8000`. FastAPI documentation is available at `/docs`.
+The API is available at `http://127.0.0.1:8000`; interactive docs at `/docs`.
 
-## API
+## API reference
 
-### Authentication
+**Authentication:** all endpoints except `/webhook/process` require `X-API-Key` when `API_AUTH_TOKEN` is set in `.env`. Leave it empty for local development — auth is disabled. `/webhook/process` is exempt: it authenticates via the QStash `Upstash-Signature` header.
 
-All endpoints except `/webhook/process` require an API key when `API_AUTH_TOKEN` is set in `.env`:
+| Endpoint | Mode | Description |
+|---|---|---|
+| `POST /ask` | Async | Enqueues the question on QStash, waits for the webhook result, caches successful responses |
+| `POST /ask-direct` | Sync | Runs the agent inline — use for local or synchronous execution |
+| `POST /webhook/process` | Async | Consumes the queue (QStash signature verified) |
+| `POST /cache/invalidate` | Sync | Clears all semantic-cache entries (TTL-based otherwise, 600s default) |
 
-```bash
-curl -X POST http://your-host/ask-direct \
-  -H 'Content-Type: application/json' \
-  -H 'X-API-Key: your-token' \
-  -d '{"question":"Why did SparkClean 1kg sales spike in Mumbai?"}'
-```
-
-Leave `API_AUTH_TOKEN` empty for local development — auth is disabled and no header is required.
-
-`/webhook/process` is exempt from the API key: it authenticates via the QStash `Upstash-Signature` header instead.
-
-### Direct request
-
-Use `/ask-direct` for local or synchronous execution:
+Example:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/ask-direct \
@@ -65,32 +82,16 @@ curl -X POST http://127.0.0.1:8000/ask-direct \
   -d '{"question":"Why did SparkClean 1kg sales spike in Mumbai?"}'
 ```
 
-### Queued request
+## Docs
 
-Use `/ask` when QStash and Redis are configured. The endpoint enqueues the question, waits for the webhook result, and caches successful responses.
-
-QStash calls `/webhook/process`; configure the public webhook base URL and signing keys in `.env`.
-
-### Cache invalidation
-
-The semantic cache is TTL-based (600s default) and is also invalidated explicitly on data update events via `POST /cache/invalidate`, which clears all cached entries:
-
-```bash
-curl -X POST http://127.0.0.1:8000/cache/invalidate
-```
-
-Pre-synthesizing cached responses for frequent topics is future work.
-
-**Auth:** `/cache/invalidate` requires `X-API-Key: <token>` when `API_AUTH_TOKEN` is set — see [Authentication](#authentication).
-
-## Data
-
-- `Data/` contains the source tables and data dictionary.
-- `cleaned/` contains normalized tables used by the application.
-- `omitted/` contains rows excluded during cleaning.
-- `working_prompts/` contains the prompts used during development.
-
-The data model is a sales star schema with product, geography, rep, and distributor dimensions plus sales, targets, promotions, and stockout facts. See [`Data/DATA_DICTIONARY.md`](Data/DATA_DICTIONARY.md) and [`db.sql`](db.sql).
+- [`APPROACH.md`](APPROACH.md) — technical deep-dive: architecture, design rationale, limitations
+- [`ARTEFACT.md`](ARTEFACT.md) — data reconciliation: what was cleaned, what was omitted, and why
+- [`docs/adr/`](docs/adr/) — ADR-001…006 with index
+- [`docs/DATA_QUALITY.md`](docs/DATA_QUALITY.md) — data-quality audit
+- [`docs/LESSONS_LEARNED.md`](docs/LESSONS_LEARNED.md) — engineering takeaways
+- [`docs/MODEL_BENCHMARK.md`](docs/MODEL_BENCHMARK.md) — agent-model benchmark and selection
+- [`Data/DATA_DICTIONARY.md`](Data/DATA_DICTIONARY.md) — star-schema dictionary
+- [`db.sql`](db.sql) — schema definition
 
 ## Tests
 
@@ -109,4 +110,10 @@ src/cache/        Semantic cache and embeddings
 src/internal/db/  Database models, sessions, and vector search
 scripts/          Data cleaning, preprocessing, and embedding utilities
 tests/            API, cache, and data-cleaning tests
+tests/evals/      Golden-set agent evals and runner
+Data/             Raw source tables
+cleaned/          Normalized tables used by the application
+omitted/          Rows excluded during cleaning
 ```
+
+*Note: originally built as a university data-analytics assignment over a sample FMCG sales dataset; reworked and maintained here as a portfolio project.*
