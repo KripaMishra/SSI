@@ -56,6 +56,16 @@ Use `/ask` when QStash and Redis are configured. The endpoint enqueues the quest
 
 QStash calls `/webhook/process`; configure the public webhook base URL and signing keys in `.env`.
 
+### Cache invalidation
+
+The semantic cache is TTL-based (600s default) and is also invalidated explicitly on data update events via `POST /cache/invalidate`, which clears all cached entries:
+
+```bash
+curl -X POST http://127.0.0.1:8000/cache/invalidate
+```
+
+No authentication is attached yet; API auth is tracked separately (issue #11). Pre-synthesizing cached responses for frequent topics is future work.
+
 ## Data
 
 - `Data/` contains the source tables and data dictionary.

@@ -192,7 +192,8 @@ sequenceDiagram
 - **Similarity threshold**: 0.97 (cosine)
 - **Storage**: Redis hashes with TTL (600s default)
 - **Cache promotion**: hit refreshes TTL (hot-cache)
-- **Limitation**: Current TTL-based invalidation is naive. Better approach: invalidate on data update events + pre-synthesize cache for frequent topics
+- **Invalidation**: `POST /cache/invalidate` clears all semantic cache keys explicitly — call it on data update events; TTL remains as a backstop
+- **Limitation**: Invalidation is all-or-nothing (no selective key invalidation) and unauthenticated (#11 adds API auth). Pre-synthesizing responses for frequent topics is future work
 
 ### 8. Tracing
 
@@ -213,7 +214,7 @@ Langfuse integrated at module load in `graph.py`. Traces every LLM call, chain s
 
 1. **Single vs. multi-agent**: Chose single agent with tool loop. Multi-agent would introduce supervision overhead, state management complexity, excessive token consumption, and higher latency without clear benefit for this scope.
 2. **Data inconsistencies**: Many sales number anomalies lack documentation. Better source context could salvage some data points with more nuanced handling.
-3. **Cache invalidation**: Current TTL-only approach is naive. Production version should invalidate on data update events and pre-synthesize responses for frequent topics.
+3. **Cache invalidation**: Explicit invalidation via `POST /cache/invalidate` exists (call on data update events), but it is all-or-nothing and unauthenticated (#11 adds API auth). Pre-synthesizing responses for frequent topics remains future work.
 4. **Model choice**: `deepseek-v4-flash` is overkill and slower than needed. Used due to resource constraints on `gemini-flash-lite`.
 5. **Query ORM wrapper**: Current query builder limits complex SQL. A read replica with raw query execution would enable larger, more complex queries in a single call.
 6. **Evals**: No systematic prompt benchmarking or evaluation suite.
