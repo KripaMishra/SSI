@@ -43,7 +43,10 @@ def require_api_key(x_api_key: str | None = Header(default=None)):
     """
     if not API_AUTH_TOKEN:
         return
-    if x_api_key is None or not hmac.compare_digest(x_api_key, API_AUTH_TOKEN):
+    # bytes, not str: compare_digest raises TypeError on non-ASCII str, and
+    # header values (latin-1 decoded) or an env token with non-ASCII chars
+    # would turn every auth check into a 500 instead of a 401.
+    if x_api_key is None or not hmac.compare_digest(x_api_key.encode(), API_AUTH_TOKEN.encode()):
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 _cache = SemanticCache()
