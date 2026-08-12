@@ -26,39 +26,49 @@ steps, one concern per commit.
 `task_plan.md` was the plan: **Redis semantic cache + python-rq queue +
 Docker Compose** (`ssi-api`, `ssi-worker`, `redis` services, concurrency 5,
 TTL 10 min, 0.97 cosine threshold, 10+ tests). Commits:
-- `6e02ad7` build: add cache queue dependencies (`rq`, `redis`, `numpy`)
-- `ed140a1` feat(cache): semantic response cache
-- `30cfd66` feat(api): queue cached ask requests
-- `f912837` build: add API container (docker-compose)
-- `7aa1e22` chore(prompt): add cache queue prompt
+- `6e02ad7` build: add cache queue dependencies (`qstash`, `redis`,
+  `python-dotenv`, `httpx` — the planned `rq` dep never landed)
+- `ed140a1` feat(cache): semantic response cache (QStash result keys)
+- `30cfd66` feat(api): queue cached ask requests (QStash enqueue + webhook)
+- `f912837` build: add API container (Dockerfile; no compose file was committed)
+- `7aa1e22` chore(prompt): add cache queue prompt (the RQ→QStash swap instruction)
 - `a44a670` chore: ignore task plan (the RQ plan was **gitignored**)
 - `107634f` / `e44d8bf` tests for queue flow and cache matching
 
+The committed implementation was **QStash-based from the first queue commit**
+(`ed140a1`/`30cfd66` enqueue via QStash and poll `qstash_result:{id}`) — an RQ
+worker or docker-compose file never existed in the repo (see Phase 3).
+
 ### Phase 3 — Mid-development pivot: RQ → QStash (Aug 5, 16:07–16:46)
-~40 minutes after the queue work started, the stack was swapped:
+The swap instruction landed ~2 minutes after the first queue commit (prompt
+`7aa1e22` at 16:08:59 vs. deps `6e02ad7` at 16:07:11); QStash fixes ran
+through 16:46 (`df06007`):
 - `working_prompts/cache_queues.md` instructs: *"Swap the redis with
   upstash instance of redis; swap the rq with QStash"* — Upstash Redis +
   QStash with a webhook receiver
 - `ff8ccf4` chore(api): add default entrypoint for vercel deployment —
   the deployment target is **Vercel serverless**, where a long-running RQ
   worker and docker-compose cannot run
-- `75ee659` chore: remove unused packages — RQ-era data-science deps
+- `75ee659` chore: remove unused packages — data-science deps
   (`numpy`, `pandas`, `scikit-learn`, `scipy`, `matplotlib`, `joblib`)
-  dropped from `requirements.txt`
+  present since the initial upload, dropped from `requirements.txt`
 - `df06007` fix: fetch qstash signing key — webhook signature verification
 
 **Why it changed:** the deployment constraint (Vercel serverless) makes a
 self-hosted worker impossible. QStash is a managed queue that delivers to a
 serverless webhook endpoint; Upstash Redis replaces self-hosted Redis for
 the same reason. The plan in `task_plan.md` never considered the deploy
-target — the constraint surfaced only when the docker-compose worker
-couldn't ship.
+target — the constraint surfaced as the queue/deployment work started, and
+the swap was directed via `working_prompts/cache_queues.md`.
 
-**What it cost:** the RQ path was fully implemented, tested, and
-docker-composed before being discarded. That design + implementation + test
-effort was duplicated, not reused. APPROACH.md limitation #8 states it
-directly: the migration *"burned AI credits and prevented dedicated review
-loops"* — the session's remaining budget went to rework instead of review.
+**What it cost:** the RQ path existed as a plan, not as code — no RQ worker,
+`rq` dependency, or docker-compose file ever landed in the repo; the
+committed queue implementation was QStash from its first commit (16:07). The
+discarded effort was the plan and prompt churn (`task_plan.md` gitignored at
+`a44a670`, swap prompt added at `7aa1e22`), not a reimplemented stack.
+APPROACH.md limitation #8 states it directly: the migration *"burned AI
+credits and prevented dedicated review loops"* — the session's remaining
+budget went to rework instead of review.
 
 ### Phase 4 — Fixes and documentation (Aug 5, 18:00–19:30)
 Agent response-policy fixes (`4a759b5`), approach/artefact docs
@@ -96,7 +106,7 @@ prevented.
 
 1. **Lock queue/async infrastructure before writing code — and before
    choosing the deploy target.** Decide self-hosted worker vs. managed
-   queue in the plan, not 40 minutes into implementation. Check the
+   queue in the plan, before implementation starts. Check the
    deployment platform's constraints first (Vercel serverless ⇒ no
    long-running workers ⇒ QStash/Upstash from day one). A `task_plan.md`
    should state the deploy target and the infra decision; a plan that is
