@@ -201,6 +201,18 @@ async def process_webhook(request: Request):
         return {"ok": False, "error": str(e)}
 
 
+@app.post("/cache/invalidate")
+def invalidate_cache():
+    """Invalidate all semantic cache entries. Call on data update events.
+
+    ponytail: no auth yet — webhook signature verification is QStash-specific;
+    #11 adds API auth for all endpoints.
+    """
+    _cache.clear()
+    logger.info("semantic cache invalidated")
+    return {"ok": True}
+
+
 @app.post("/ask-direct", response_model=AgentResponse)
 def ask_direct(request: AskRequest):
     logger.info("processing /ask-direct", extra={"question": request.question[:200]})
