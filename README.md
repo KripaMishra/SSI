@@ -40,6 +40,21 @@ The API is available at `http://127.0.0.1:8000`. FastAPI documentation is availa
 
 ## API
 
+### Authentication
+
+All endpoints except `/webhook/process` require an API key when `API_AUTH_TOKEN` is set in `.env`:
+
+```bash
+curl -X POST http://your-host/ask-direct \
+  -H 'Content-Type: application/json' \
+  -H 'X-API-Key: your-token' \
+  -d '{"question":"Why did SparkClean 1kg sales spike in Mumbai?"}'
+```
+
+Leave `API_AUTH_TOKEN` empty for local development — auth is disabled and no header is required.
+
+`/webhook/process` is exempt from the API key: it authenticates via the QStash `Upstash-Signature` header instead.
+
 ### Direct request
 
 Use `/ask-direct` for local or synchronous execution:
@@ -65,6 +80,8 @@ curl -X POST http://127.0.0.1:8000/cache/invalidate
 ```
 
 No authentication is attached yet; API auth is tracked separately (issue #11). Pre-synthesizing cached responses for frequent topics is future work.
+
+**Auth:** `/cache/invalidate` requires `X-API-Key: <token>` when `API_AUTH_TOKEN` is set — see [Authentication](#authentication).
 
 ## Data
 
