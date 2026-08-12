@@ -44,6 +44,28 @@ def _mock_agent_response(question: str) -> AgentResponse:
     )
 
 
+class TestUi(TestCase):
+    def test_root_serves_test_ui(self):
+        response = client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("SALES INTELLIGENCE", response.text)
+
+
+class TestCors(TestCase):
+    def test_ask_direct_preflight(self):
+        response = client.options(
+            "/ask-direct",
+            headers={
+                "Origin": "http://127.0.0.1:5500",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["access-control-allow-origin"], "*")
+        self.assertIn("POST", response.headers["access-control-allow-methods"])
+
+
 class TestAskDirect(TestCase):
     def _ask(self, question: str):
         start = time.time()

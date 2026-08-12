@@ -2,7 +2,10 @@ import hmac
 import json
 import os
 import time
+from pathlib import Path
 from fastapi import FastAPI, Request, HTTPException, Depends, Header
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 import redis
@@ -76,6 +79,13 @@ def _get_receiver():
     return _receiver
 
 app = FastAPI(title="SSI Agent API")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=os.getenv("CORS_ALLOW_ORIGINS", "*").split(","),
+    allow_methods=["POST"],
+    allow_headers=["Content-Type", "X-API-Key"],
+)
+_UI_PATH = Path(__file__).resolve().parents[2] / "ui" / "index.html"
 
 
 class AskRequest(BaseModel):
@@ -84,6 +94,11 @@ class AskRequest(BaseModel):
 
 class ErrorResponse(BaseModel):
     detail: str
+
+
+@app.get("/", include_in_schema=False)
+def ui():
+    return FileResponse(_UI_PATH)
 
 
 @app.middleware("http")
