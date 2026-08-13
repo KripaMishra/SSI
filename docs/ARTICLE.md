@@ -122,15 +122,15 @@ This is what let us *measure* the model choice instead of vibes-ing it (next sec
 
 The repo documents its failures in detail — `docs/LESSONS_LEARNED.md` — and the failures are the most credible part of the project. Here's the short version.
 
-### The plan met reality at 16:07, and the plan lost
+### The plan met reality, and the plan lost
 
 The original plan (a `task_plan.md`): Redis cache + **python-rq** queue + Docker Compose with a worker service. Reasonable plan. Committed to. Gitignored later.
 
 The problem: the plan never considered the deployment target. The target was **Vercel serverless** — where a long-running RQ worker literally cannot run. The constraint surfaced the moment queue work started:
 
-- **16:07** — queue dependencies landed (with the first QStash commit, not RQ — the `rq` dependency never existed).
-- **16:08** — the swap instruction landed: *"swap the redis with upstash instance of redis; swap the rq with QStash."*
-- **16:46** — QStash implementation done: webhook endpoint, signature verification, signing-key fix.
+- Queue dependencies landed — with the first QStash commit, not RQ. The `rq` dependency never existed.
+- The swap instruction landed two minutes later: *"swap the redis with upstash instance of redis; swap the rq with QStash."*
+- QStash implementation followed: webhook endpoint, signature verification, signing-key fix.
 
 The plan was dead within two minutes of the work starting. Nothing about the RQ path was ever built — no worker, no compose file. But the cost was real: plan churn, prompt churn, and **burned AI credits that were supposed to fund review** (see: the AI-tooling constraints below).
 
