@@ -77,7 +77,7 @@ def build_agent(config: AgentConfig | None = None) -> CompiledStateGraph:
         base_url=config.openai_base_url,
         api_key=config.openai_api_key,
         temperature=0,
-        reasoning_effort="low"
+        reasoning_effort=config.reasoning_effort
     )
 
     structured_llm = llm.with_structured_output(AgentResponse, method="json_mode")
