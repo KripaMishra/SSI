@@ -13,9 +13,10 @@ from src.utils.logger import get_logger
 logger = get_logger(__name__)
 
 # ── paths ────────────────────────────────────────────────────────────
-RAW   = Path("/home/kripa/Personal/projects/SSI/Data")
-CLEAN = Path("/home/kripa/Personal/projects/SSI/cleaned")
-OMIT  = Path("/home/kripa/Personal/projects/SSI/omitted")
+ROOT  = Path(__file__).resolve().parents[1]
+RAW   = ROOT / "Data"
+CLEAN = ROOT / "cleaned"
+OMIT  = ROOT / "omitted"
 CLEAN.mkdir(exist_ok=True)
 OMIT.mkdir(exist_ok=True)
 

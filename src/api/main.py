@@ -46,7 +46,7 @@ def require_api_key(x_api_key: str | None = Header(default=None)):
 
 _cache = SemanticCache()
 
-app = FastAPI(title="SSI Agent API")
+app = FastAPI(title="Sales Intelligence Agent API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=os.getenv("CORS_ALLOW_ORIGINS", "*").split(","),

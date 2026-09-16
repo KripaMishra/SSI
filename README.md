@@ -1,4 +1,4 @@
-# SSI — Sales Intelligence Agent
+# Sales Intelligence Agent
 
 Ask sales questions in plain English; get SQL-backed answers with citations, confidence scores, and a response status. The agent handles factual (`WHAT`), causal (`WHY`), and recommendation (`WHAT_TO_DO`) questions over a star-schema sales dataset and cleaned business notes — either synchronously or through an async queue.
 
