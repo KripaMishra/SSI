@@ -36,11 +36,15 @@ APPROACH.md limitation #4 ("deepseek-v4-flash is overkill and slower than needed
 refuted by this data for the current catalog. Revisit if a fast-tier model beats flash
 on **both** axes (pass rate ≥ and wall time <) in a future benchmark.
 
-## Reproduce
+**Reproduce** — update (2026-09-16): the agent now targets the Command Code Provider API
+(`https://api.commandcode.ai/provider/v1`, see [ADR-008](adr/008-command-code-provider-api.md)),
+where model ids are namespaced. The numbers above were produced on the previous endpoint
+(`https://opencode.ai/zen/go/v1`), so they stand as evidence for the *model* choice, not for
+the current backend; re-confirm on the new endpoint before relying on them.
 
 ```bash
-MODEL_NAME=deepseek-v4-flash .venv/bin/python tests/evals/run_evals.py   # baseline
-MODEL_NAME=kimi-k2.6     .venv/bin/python tests/evals/run_evals.py   # candidate
+MODEL_NAME=deepseek/deepseek-v4-flash   .venv/bin/python tests/evals/run_evals.py   # baseline
+MODEL_NAME=moonshotai/Kimi-K2.6         .venv/bin/python tests/evals/run_evals.py   # candidate
 ```
 
 Raw logs: `MODEL_NAME`-tagged runs under `~/.pi` session workspace (not committed).
