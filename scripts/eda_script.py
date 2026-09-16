@@ -2,8 +2,9 @@
 import pandas as pd
 import re
 from collections import defaultdict
+from pathlib import Path
 
-DATA = "/home/kripa/Personal/projects/SSI/Data"
+DATA = str(Path(__file__).resolve().parents[1] / "Data")
 REPORT = []  # accumulate findings
 
 def log(section, finding):

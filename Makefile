@@ -1,4 +1,4 @@
-# Commands for running SSI. Dependencies come from pyproject.toml through uv.
+# Commands for the Sales Intelligence Agent. Dependencies come from pyproject.toml through uv.
 ARGS ?=
 PORT ?= 8000
 

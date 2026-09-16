@@ -58,7 +58,7 @@ class TestUi(TestCase):
     def test_root_serves_test_ui(self):
         response = client.get("/")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("SALES INTELLIGENCE", response.text)
+        self.assertIn("Sales Intelligence Agent", response.text)
 
 
 class TestCors(TestCase):

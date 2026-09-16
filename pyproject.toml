@@ -1,5 +1,5 @@
 [project]
-name = "ssi"
+name = "sales-intelligence-agent"
 version = "0.1.0"
 description = "Sales intelligence agent API and workers"
 requires-python = ">=3.12"
