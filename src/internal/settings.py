@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     postgres_url: str = ""
     sqlite_local_path: str = "src/internal/db/ssi.db"
 
+    # Shared-secret auth for the public API. Empty = auth disabled (local dev).
+    # When set, /ask, /ask-direct and /cache/invalidate require `X-API-Key: <token>`.
+    # /webhook/process is exempt — it verifies the QStash signature instead.
+    api_auth_token: str = ""
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 

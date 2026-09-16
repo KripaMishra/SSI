@@ -1,0 +1,93 @@
+[
+  {
+    "id": "what-1-glucojoy-north-nov",
+    "question": "What were GlucoJoy's total primary sales units in the North region in November 2025?",
+    "expected_intent": "WHAT",
+    "notes": "Known data fact: GlucoJoy North Nov-2025 totals ~43,147 units from cleaned/fact_primary_sales.csv (region mapping via dim_geo). Filter on sales_units_flag before summing."
+  },
+  {
+    "id": "what-2-sparkclean-mumbai-sep",
+    "question": "How many SparkClean 1kg units were sold in Mumbai in September 2025?",
+    "expected_intent": "WHAT",
+    "notes": "Known data fact: ~12,445 units (week_start 2025-09-xx, territory Mumbai, pack_size 1kg)."
+  },
+  {
+    "id": "what-3-glucojoy-mrp",
+    "question": "What is the base MRP of GlucoJoy Choco 50g?",
+    "expected_intent": "WHAT",
+    "notes": "Known data fact: dim_sku GJ-002, base_mrp 10."
+  },
+  {
+    "id": "what-4-stockouts-q3",
+    "question": "How many stockout events were recorded in Q3 2025?",
+    "expected_intent": "WHAT",
+    "notes": "Answerable from cleaned/stockouts.csv; status OK only if the data supports it, otherwise ABSTAINED is acceptable."
+  },
+  {
+    "id": "why-1-sparkclean-spike",
+    "question": "Why did SparkClean 1kg sales spike in Mumbai in September 2025?",
+    "expected_intent": "WHY",
+    "notes": "Known data fact: 12,445 units in Sep-2025 vs 9,592 (Aug) and 10,181 (Oct). Promotion SC-004 PriceOff 15% active from 2025-09-16 in Mumbai (promotions.csv). Citations MANDATORY."
+  },
+  {
+    "id": "why-2-glucojoy-north-nov",
+    "question": "Why did GlucoJoy sales in the North region decline in November 2025?",
+    "expected_intent": "WHY",
+    "notes": "Compare GlucoJoy North monthly units across Oct/Nov 2025 to confirm the decline before explaining; cross-check stockouts/promotions. Citations MANDATORY."
+  },
+  {
+    "id": "why-3-promo-delhi",
+    "question": "Why did primary sales in Delhi increase in the week of 2025-09-16?",
+    "expected_intent": "WHY",
+    "notes": "Anchor: promotions.csv promo_type PriceOff for Delhi territory around that week; the model must ground the answer in the promotion calendar and sales data. Citations MANDATORY."
+  },
+  {
+    "id": "whattodo-1-restock-glucojoy",
+    "question": "Which regions should we prioritise for GlucoJoy restocking ahead of December 2025?",
+    "expected_intent": "WHAT_TO_DO",
+    "expected_status": "PENDING_APPROVAL",
+    "notes": "Recommendation: status MUST be PENDING_APPROVAL per system prompt."
+  },
+  {
+    "id": "whattodo-2-extend-promo",
+    "question": "Should we extend the SparkClean 1kg promotion in Mumbai into October 2025?",
+    "expected_intent": "WHAT_TO_DO",
+    "expected_status": "PENDING_APPROVAL",
+    "notes": "Recommendation based on the Sep-2025 spike; status MUST be PENDING_APPROVAL."
+  },
+  {
+    "id": "whattodo-3-stockout-action",
+    "question": "What action should we take to reduce the impact of stockouts in Chennai?",
+    "expected_intent": "WHAT_TO_DO",
+    "expected_status": "PENDING_APPROVAL",
+    "notes": "Recommendation; status MUST be PENDING_APPROVAL."
+  },
+  {
+    "id": "ood-1-weather",
+    "question": "What will the weather be like in Mumbai next week?",
+    "expected_intent": "OUT_OF_DOMAIN",
+    "expected_status": "ABSTAINED",
+    "notes": "No sales data can answer this; system prompt requires ABSTAINED for unanswerable questions."
+  },
+  {
+    "id": "ood-2-ipl",
+    "question": "Who won the 2025 IPL final?",
+    "expected_intent": "OUT_OF_DOMAIN",
+    "expected_status": "ABSTAINED",
+    "notes": "Outside the sales domain; ABSTAINED expected."
+  },
+  {
+    "id": "amb-1-sales-doing-well",
+    "question": "Are our sales doing well?",
+    "expected_intent": "WHAT",
+    "strict": false,
+    "notes": "Ambiguous: no product/region/period scope. Model should pick a reasonable interpretation (preference: WHAT with ABSTAINED/qualified answer). Harness only requires a non-ERROR valid response."
+  },
+  {
+    "id": "amb-2-why-sales-bad",
+    "question": "Why are sales bad?",
+    "expected_intent": "WHY",
+    "strict": false,
+    "notes": "Ambiguous: 'sales' and 'bad' are under-specified. Preference: WHY but only answerable after narrowing scope. Harness only requires a non-ERROR valid response."
+  }
+]

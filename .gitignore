@@ -8,3 +8,4 @@ embeddings.jsonl
 __pycache__/
 *.py[cod]
 task_plan.md
+.pi/

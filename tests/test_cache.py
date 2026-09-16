@@ -221,6 +221,24 @@ class TestSemanticCache(TestCase):
         refreshed_ttl = self.fake_redis.ttl(key)
         self.assertGreater(refreshed_ttl, 2)
 
+    # --- Invalidation ---
+
+    def test_13_cache_clear_idempotent_when_empty(self):
+        """Clearing an empty cache should not raise and stay a miss"""
+        self.cache.clear()
+        self.cache.clear()
+        self.assertIsNone(self.cache.get("Why did SparkClean spike?"))
+
+    def test_14_cache_usable_after_clear(self):
+        """Cache should accept and return entries after invalidation"""
+        self.cache.set("Why did SparkClean spike?", _make_response("Promotion"))
+        self.cache.clear()
+        query = "Why did SparkClean 1kg sales spike in Mumbai?"
+        self.cache.set(query, _make_response("Because of a promotion"))
+        result = self.cache.get(query)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.answer, "Because of a promotion")
+
 
 if __name__ == "__main__":
     main()
