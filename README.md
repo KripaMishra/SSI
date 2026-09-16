@@ -45,9 +45,7 @@ Key decisions (agent loop over multi-agent, QStash over a local task queue, cach
 ## Quickstart
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+uv sync            # installs dependencies from pyproject.toml + uv.lock
 cp .env.example .env
 ```
 
@@ -62,16 +60,18 @@ against the plan's credits. See [ADR-008](docs/adr/008-command-code-provider-api
 Run the whole stack (API + worker + Redis) with Docker Compose:
 
 ```bash
-docker compose up --build
+make up            # docker compose up --build
 ```
 
 Or run the pieces yourself — the API needs a worker alongside it, otherwise queued tasks stay
 `QUEUED`:
 
 ```bash
-uvicorn src.api.main:app --reload                          # API
-dramatiq src.queue.actors -Q asks -t 8                     # one worker per API call type
+make api-dev       # API on 127.0.0.1:8000, reloads on changes
+make worker        # one worker for the "asks" queue
 ```
+
+`make help` lists every command.
 
 The API is available at `http://127.0.0.1:8000`; interactive docs at `/docs`.
 
@@ -112,7 +112,7 @@ curl http://127.0.0.1:8000/tasks/8cdcae57-…
 ## Tests
 
 ```bash
-python -m unittest discover -s tests
+make test          # python -m unittest discover -s tests
 ```
 
 Agent evals (golden question set + policy checks): `python tests/evals/run_evals.py --fake` runs offline against a scripted stub; omit `--fake` to run against the live agent.
