@@ -21,18 +21,6 @@ CACHE_SIMILARITY_THRESHOLD = float(os.getenv("CACHE_SIMILARITY_THRESHOLD", "0.97
 CACHE_KEY_PREFIX = "semcache:"
 CACHE_INDEX_KEY = "semcache:index"
 
-QUEUE_NAME = os.getenv("QSTASH_QUEUE_NAME", "ssi-asks")
-QSTASH_WEBHOOK_PATH = os.getenv("QSTASH_WEBHOOK_PATH", "/webhook/process")
-QSTASH_POLL_INTERVAL = float(os.getenv("QSTASH_POLL_INTERVAL", "0.5"))
-QSTASH_JOB_TIMEOUT = int(os.getenv("QSTASH_JOB_TIMEOUT", "180"))
-QSTASH_RESULT_KEY_PREFIX = "qstash_result:"
-
-UPSTASH_REDIS_URL = os.getenv("REDIS_URL")
-QSTASH_URL = os.getenv("QSTASH_URL")
-QSTASH_TOKEN = os.getenv("QSTASH_TOKEN")
-QSTASH_CURRENT_SIGNING_KEY = os.getenv("QSTASH_CURRENT_SIGNING_KEY")
-QSTASH_NEXT_SIGNING_KEY = os.getenv("QSTASH_NEXT_SIGNING_KEY")
-
 
 def _cosine_similarity(a: list[float], b: list[float]) -> float:
     arr_a = np.array(a, dtype=np.float64)
