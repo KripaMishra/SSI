@@ -7,13 +7,13 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
 
 load_dotenv()
 
 from src.agent.config import agent_config
 from src.agent.graph import AgentTimeoutError, run_agent
 from src.agent.models import AgentResponse
+from src.api.models import AskRequest, TaskStatusResponse
 from src.cache.cache import SemanticCache
 from src.internal.settings import settings
 from src.queue.actors import run_agent_task
@@ -54,27 +54,6 @@ app.add_middleware(
     allow_headers=["Content-Type", "X-API-Key"],
 )
 _UI_PATH = Path(__file__).resolve().parents[2] / "ui" / "index.html"
-
-
-class AskRequest(BaseModel):
-    question: str
-
-
-class TaskStatusResponse(BaseModel):
-    task_id: str
-    status: str
-    actor: str
-    queue: str
-    attempts: int
-    created_at: float | None = None
-    started_at: float | None = None
-    finished_at: float | None = None
-    result: dict | None = None
-    error: str | None = None
-
-
-class ErrorResponse(BaseModel):
-    detail: str
 
 
 @app.get("/", include_in_schema=False)
